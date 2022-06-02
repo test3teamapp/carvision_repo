@@ -1,0 +1,295 @@
+
+- Create a wifi AP for the mobile app to connect and send to the hub the image/video stream/data
+
+#!/bin/bash
+nmcli d wifi hotspot ifname wlx784476a9c874 ssid carvision password 1234567890
+
+-login usb -
+
+sudo screen /dev/ttyACM0 115200
+
+
+
+-To disable GUI on boot, run:-
+
+sudo systemctl set-default multi-user.target
+
+-To enable GUI again issue the command:-
+
+sudo systemctl set-default graphical.target
+
+-To start Gnome session on a system without a current GUI just execute:-
+
+sudo systemctl start gdm3.service
+
+
+
+
+ - check power mode -
+ sudo nvpmodel -q
+ 
+ -stats-
+ tegrastats
+ 
+ (sudo -H pip install --no-cache-dir -U jetson-stats)
+ jtop
+ 
+ 
+- video devices list -
+v4l2-ctl --list-devices
+
+
+- remote desktop issues - 
+
+https://askubuntu.com/questions/1227659/xrdp-client-crashing-on-loading-screen-for-jetson-nano
+
+
+-- gjk compile with linked library ---
+
+gcc -Wall testgjk.c /usr/local/lib/libopenGJKlib.so  -o testgjk -lm
+
+--- jetson inference
+
+If you aren't using the Docker container, here's a condensed form of the commands to build/install the project directly on your Jetson:
+
+sudo apt-get update
+sudo apt-get install git cmake libpython3-dev python3-numpy
+git clone --recursive https://github.com/dusty-nv/jetson-inference
+cd jetson-inference
+mkdir build
+cd build
+cmake ../
+make -j$(nproc)
+sudo make install
+sudo ldconfig
+
+
+cmake ../ && make -j$(nproc) && sudo make install
+
+
+
+--- detect net ---
+
+positional arguments:
+    input_URI       resource URI of input stream  (see videoSource below)
+    output_URI      resource URI of output stream (see videoOutput below)
+
+detectNet arguments:
+  --network=NETWORK     pre-trained model to load, one of the following:
+                            * ssd-mobilenet-v1
+                            * ssd-mobilenet-v2 (default)
+                            * ssd-inception-v2
+                            * pednet
+                            * multiped
+                            * facenet
+                            * coco-airplane
+                            * coco-bottle
+                            * coco-chair
+                            * coco-dog
+  --model=MODEL         path to custom model to load (caffemodel, uff, or onnx)
+  --prototxt=PROTOTXT   path to custom prototxt to load (for .caffemodel only)
+  --labels=LABELS       path to text file containing the labels for each class
+  --input-blob=INPUT    name of the input layer (default is 'data')
+  --output-cvg=COVERAGE name of the coverge output layer (default is 'coverage')
+  --output-bbox=BOXES   name of the bounding output layer (default is 'bboxes')
+  --mean-pixel=PIXEL    mean pixel value to subtract from input (default is 0.0)
+  --batch-size=BATCH    maximum batch size (default is 1)
+  --threshold=THRESHOLD minimum threshold for detection (default is 0.5)
+  --alpha=ALPHA         overlay alpha blending value, range 0-255 (default: 120)
+  --overlay=OVERLAY     detection overlay flags (e.g. --overlay=box,labels,conf)
+                        valid combinations are:  'box', 'labels', 'conf', 'none'
+     --profile             enable layer profiling in TensorRT
+
+videoSource arguments:
+    input_URI            resource URI of the input stream, for example:
+                             * /dev/video0              (V4L2 camera #0)
+                             * csi://0                  (MIPI CSI camera #0)
+                             * rtp://@:1234             (RTP stream)
+                             * rtsp://user:pass@ip:1234 (RTSP stream)
+                             * file://my_image.jpg      (image file)
+                             * file://my_video.mp4      (video file)
+                             * file://my_directory/     (directory of images)
+  --input-width=WIDTH    explicitly request a width of the stream (optional)
+  --input-height=HEIGHT  explicitly request a height of the stream (optional)
+  --input-rate=RATE      explicitly request a framerate of the stream (optional)
+  --input-codec=CODEC    RTP requires the codec to be set, one of these:
+                             * h264, h265
+                             * vp8, vp9
+                             * mpeg2, mpeg4
+                             * mjpeg
+  --input-flip=FLIP      flip method to apply to input (excludes V4L2):
+                             * none (default)
+                             * counterclockwise
+                             * rotate-180
+                             * clockwise
+                             * horizontal
+                             * vertical
+                             * upper-right-diagonal
+                             * upper-left-diagonal
+  --input-loop=LOOP      for file-based inputs, the number of loops to run:
+                             * -1 = loop forever
+                             *  0 = don't loop (default)
+                             * >0 = set number of loops
+
+videoOutput arguments:
+    output_URI           resource URI of the output stream, for example:
+                             * file://my_image.jpg    (image file)
+                             * file://my_video.mp4    (video file)
+                             * file://my_directory/   (directory of images)
+                            * rtp://<remote-ip>:1234 (RTP stream)
+                             * display://0            (OpenGL window)
+  --output-codec=CODEC   desired codec for compressed output streams:
+                            * h264 (default), h265
+                            * vp8, vp9
+                            * mpeg2, mpeg4
+                            * mjpeg
+  --bitrate=BITRATE      desired target VBR bitrate for compressed streams,
+                         in bits per second. The default is 4000000 (4 Mbps)
+  --headless             don't create a default OpenGL GUI window
+
+logging arguments:
+  --log-file=FILE        output destination file (default is stdout)
+  --log-level=LEVEL      message output threshold, one of the following:
+                             * silent
+                             * error
+                             * warning
+                             * success
+                             * info
+                             * verbose (default)
+                             * debug
+  --verbose              enable verbose logging (same as --log-level=verbose)
+  --debug                enable debug logging   (same as --log-level=debug)
+
+
+detectnet --network=multiped /jetson-inference/data/videos/DrivingSpain.mp4
+
+detectnet --network=ssd-mobilenet-v1 --input-width=300 --input-height=200 /jetson-inference/data/videos/DrivingSpain.mp4
+
+detectnet --network=ssd-mobilenet-v1 --threshold=0.4 /jetson-inference/data/videos/DrivingSpain.mp4
+
+./detectnet csi://0 --input-width=1920
+
+detectnet csi://0 --input-width=1640 --input-height=1232
+
+./jetson-inference/build/aarch64/bin/detectnet csi://0 --input-width=1640 --input-height=1232
+
+
+GST_ARGUS: Available Sensor modes :
+GST_ARGUS: 3264 x 2464 FR = 21.000000 fps Duration = 47619048 ; Analog Gain range min 1.000000, max 10.625000; Exposure Range min 13000, max 683709000;
+
+GST_ARGUS: 3264 x 1848 FR = 28.000001 fps Duration = 35714284 ; Analog Gain range min 1.000000, max 10.625000; Exposure Range min 13000, max 683709000;
+
+GST_ARGUS: 1920 x 1080 FR = 29.999999 fps Duration = 33333334 ; Analog Gain range min 1.000000, max 10.625000; Exposure Range min 13000, max 683709000;
+
+GST_ARGUS: 1640 x 1232 FR = 29.999999 fps Duration = 33333334 ; Analog Gain range min 1.000000, max 10.625000; Exposure Range min 13000, max 683709000;
+
+GST_ARGUS: 1280 x 720 FR = 59.999999 fps Duration = 16666667 ; Analog Gain range min 1.000000, max 10.625000; Exposure Range min 13000, max 683709000;
+
+GST_ARGUS: 1280 x 720 FR = 120.000005 fps Duration = 8333333 ; Analog Gain range min 1.000000, max 10.625000; Exposure Range min 13000, max 683709000;
+
+
+./detectnet csi://0 --input-width=1640
+
+./jetson-inference/build/aarch64/bin/detectnet csi://0 --input-width=1640 --input-height=1232
+ 
+
+--- nvgstcapture -----
+
+
+Take a picture and save to disk
+CSI camera
+Runtime command line option
+
+nvgstcapture-1.0
+Press 'j' to Capture one image.
+Press 'q' to exit
+Automated command line option
+
+nvgstcapture-1.0 --automate --capture-auto
+
+
+Capture a video and save to disk
+CSI camera
+Runtime command line option
+
+nvgstcapture-1.0
+Press '1' to Start recording video
+Press '0' to Stop recording video
+Press 'q' to exit
+
+--prev-res                        Preview width & height.Range: 2 to 12 (5632x4224) e.g., --prev-res=3
+  --cus-prev-res                    Custom Preview width & height e.g., --cus-prev-res=1920x1080
+  --image-res                       Image width & height. Range: 2 to 12 (5632x4224) e.g., --image-res=3
+  --video-res                       Video width & height. Range: 2 to 9 (3896x2192) e.g., --video-res=3
+  --camsrc                          Camera Source to use (0=v4l2, 1=csi[default], 2=videotest, 3=eglstream)
+  -m, --mode                        Capture mode value (1=still 2=video)
+
+
+nvgstcapture-1.0 --video-res=4 --mode=2
+
+                                                              
+
+
+
+
+///  ARDUINO
+
+
+./arduino-cli board listall
+Board Name                       FQBN                           
+Adafruit Circuit Playground      arduino:avr:circuitplay32u4cat 
+Arduino BT                       arduino:avr:bt                 
+Arduino Duemilanove or Diecimila arduino:avr:diecimila          
+Arduino Esplora                  arduino:avr:esplora            
+Arduino Ethernet                 arduino:avr:ethernet           
+Arduino Fio                      arduino:avr:fio                
+Arduino Gemma                    arduino:avr:gemma              
+Arduino Industrial 101           arduino:avr:chiwawa            
+Arduino Leonardo                 arduino:avr:leonardo           
+Arduino Leonardo ETH             arduino:avr:leonardoeth        
+Arduino Mega ADK                 arduino:avr:megaADK            
+Arduino Mega or Mega 2560        arduino:avr:mega               
+Arduino Micro                    arduino:avr:micro              
+Arduino Mini                     arduino:avr:mini               
+Arduino NG or older              arduino:avr:atmegang           
+Arduino Nano                     arduino:avr:nano               
+Arduino Pro or Pro Mini          arduino:avr:pro                
+Arduino Robot Control            arduino:avr:robotControl       
+Arduino Robot Motor              arduino:avr:robotMotor         
+Arduino Uno                      arduino:avr:uno                
+Arduino Uno Mini                 arduino:avr:unomini            
+Arduino Uno WiFi                 arduino:avr:unowifi            
+Arduino Yún                      arduino:avr:yun                
+Arduino Yún Mini                 arduino:avr:yunmini            
+LilyPad Arduino                  arduino:avr:lilypad            
+LilyPad Arduino USB              arduino:avr:LilyPadUSB         
+Linino One                       arduino:avr:one   
+
+
+./arduino-cli board list
+Port         Protocol Type    Board Name FQBN Core
+/dev/ttyS0   serial   Unknown                
+/dev/ttyS1   serial   Unknown                
+/dev/ttyS2   serial   Unknown                
+/dev/ttyS3   serial   Unknown                
+/dev/ttyUSB0 serial   Unknown    
+
+./arduino-cli compile --fqbn arduino:avr:uno ReadSpeedAndSteeringAngle
+
+sudo ./arduino-cli upload --port /dev/ttyUSB0 --fqbn arduino:avr:uno ReadSpeedAndSteeringAngle
+
+// for nano with old booloader
+It's already supported, you just need to specify the cpu option atmega328old in the FQBN:
+
+./arduino-cli upload -v -p /dev/ttyUSB0 -b arduino:avr:nano:cpu=atmega328old MyFirstSketch/
+
+More information: #138
+
+//serial with arduinocli
+
+sudo putty /dev/ttyUSB0 -serial -sercfg 9600,8,n,1,N &
+
+
+
+
+

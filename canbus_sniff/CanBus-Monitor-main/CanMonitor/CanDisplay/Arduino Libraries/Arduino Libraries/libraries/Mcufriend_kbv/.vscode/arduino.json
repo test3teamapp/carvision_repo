@@ -1,0 +1,6 @@
+{
+    "port": "COM5",
+    "board": "arduino:avr:mega",
+    "configuration": "cpu=atmega2560",
+    "sketch": "examples\\graphictest_kbv\\graphictest_kbv.ino"
+}
