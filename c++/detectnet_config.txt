@@ -1,0 +1,5 @@
+# Parameters for transforming speed (km/h) to m/sec [ meters  = speed * 5 / smx ]
+# The exact trasformation is given by : meters  = speed * 5 /18
+# This parameters is giving value to the smx 
+# 18 for exact meassurment. lower values increase the distance collisions are detected
+smx=12

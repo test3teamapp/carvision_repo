@@ -177,6 +177,7 @@ public:
 		OVERLAY_BOX        = (1 << 0),	/**< Overlay the object bounding boxes */
 		OVERLAY_LABEL 	    = (1 << 1),	/**< Overlay the class description labels */
 		OVERLAY_CONFIDENCE = (1 << 2),	/**< Overlay the detection confidence values */
+		OVERLAY_LINES      = (1 << 3),     /**< Overlay the bounding box lines (unfilled) */
 		OVERLAY_DEFAULT    = OVERLAY_BOX,	/**< The default choice of overlay */
 	};
 	
@@ -459,6 +460,12 @@ public:
  	 * Set overlay alpha blending value for all classes (between 0-255).
 	 */
 	void SetOverlayAlpha( float alpha );
+	
+	//from updated version 
+	/**
+	 * Set the line width used during overlay when OVERLAY_LINES is used.
+	 */
+	inline void SetLineWidth( float width )						{ mLineWidth = width; } 
 
 	/**
 	 * Load class descriptions from a label file.
@@ -496,6 +503,8 @@ protected:
 	float  mCoverageThreshold;
 	float* mClassColors[2];
 	float  mMeanPixel;
+	//from updated code
+	float  mLineWidth;
 
 	std::vector<std::string> mClassDesc;
 	std::vector<std::string> mClassSynset;

@@ -278,17 +278,6 @@ Port         Protocol Type    Board Name FQBN Core
 
 sudo ./arduino-cli upload --port /dev/ttyUSB0 --fqbn arduino:avr:uno ReadSpeedAndSteeringAngle
 
-// for nano with old booloader
-It's already supported, you just need to specify the cpu option atmega328old in the FQBN:
-
-./arduino-cli upload -v -p /dev/ttyUSB0 -b arduino:avr:nano:cpu=atmega328old MyFirstSketch/
-
-More information: #138
-
-//serial with arduinocli
-
-sudo putty /dev/ttyUSB0 -serial -sercfg 9600,8,n,1,N &
-
 
 
 
