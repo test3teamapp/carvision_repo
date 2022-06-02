@@ -107,7 +107,7 @@ void loop() {
       }
       if (canbus_dataload[1] != 12 && canbus_dataload[2] != 80) {
         canbus_speed =  canbus_dataload[2];      
-        Serial.print("Speed = ");
+        Serial.print("s");
         Serial.print(canbus_dataload[2]);
         Serial.println();
         newCanbusData = true;
@@ -123,7 +123,7 @@ void loop() {
       }
 
       canbus_steeringangle =  canbus_dataload[5];      
-      Serial.print("Steering angle = ");
+      Serial.print("a");
       Serial.print(canbus_dataload[5]);
       Serial.println();
       newCanbusData = true;
