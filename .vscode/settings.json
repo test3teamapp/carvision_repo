@@ -1,5 +1,6 @@
 {
     "files.associations": {
         "opengjk.h": "c"
-    }
+    },
+    "cmake.configureOnOpen": false
 }
