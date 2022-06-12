@@ -21,8 +21,9 @@ BLEService carService("0000dd30-76d9-48e9-aa47-d0538d18f701");  // creating the 
 
 BLEUnsignedIntCharacteristic speedReading("0000dd31-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);  // creating the Speed Value characteristic
 BLEUnsignedIntCharacteristic angleReading("0000dd32-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);  // creating the Steering angle Value characteristic
-BLEUnsignedIntCharacteristic accelReading("0000dd33-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);  // creating the accelaration angle Value characteristic
-BLEUnsignedIntCharacteristic rpmReading("0000dd34-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);    // creating the rpm Value characteristic
+BLEUnsignedIntCharacteristic rpmReading("0000dd33-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);    // creating the rpm Value characteristic
+BLEUnsignedIntCharacteristic accelReading("0000dd34-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);  // creating the accelaration angle Value characteristic
+
 
 long currentMillis = 0;
 long previousMillis = 0;
