@@ -43,6 +43,7 @@
 #include <openGJK.h>
 #include <jetson-utils/cudaCrop.h>
 #include <jetson-utils/cudaMappedMemory.h>
+#include <math.h>
 
 #ifdef HEADLESS
 #define IS_HEADLESS() "headless" // run without display
@@ -56,6 +57,12 @@ bool _signal_recieved = false;
 double _cropImagePercentage = 0.4;
 double _car_speed = 0.0;
 double _steering_angle = 0.0;
+double _leftturn_angle = 0.0;
+double _rightturn_angle = 0.0;
+int _perspective_originL[2] = {200,0};
+int _perspective_originR[2] ={1080,0};
+float _perspective_angle = 50.0;
+const double _PI_ = 3.14159265358979323846;
 
 void sig_handler(int signo)
 {
@@ -223,7 +230,7 @@ O_NDELAY
 */
 int openPortToArduino()
 {
-	const char device[] = "/dev/ttyUSB0";
+	const char device[] = "/dev/ttyACM0"; // "/dev/ttyUSB0"; // for arduino mkr 1010 the port shows as ttyACM0
 	int fd = open(device, O_RDWR | O_NOCTTY | O_NDELAY);
 	if (fd == -1)
 	{
@@ -243,10 +250,12 @@ int openPortToArduino()
 
     Serial.println("s15.0");
     Serial.println("a-2.0");
+	// getting the g/second from the gyroscope
+	Serial.println("L2.1");  Left turn
+    Serial.println("R-2.0"); Right turn
     delay(50);
 */
-void readDataFromArduino(int fd)
-{
+void readDataFromArduino(int fd){
 
 	// declaring argument of time()
 	time_t my_time = time(NULL);
@@ -263,6 +272,12 @@ void readDataFromArduino(int fd)
 
 	time.tv_sec = 10;
 	time.tv_usec = 0;
+
+	int ticksSinceGyroDataReceived = 3; // Normally, we receive 3 speed measurments / second
+										// On arduino, if speed > 0 we ask for gyro data
+										// If the gyro acceleration on X axis is > 1.0, then we sent the data
+										// if we havent received gyro data for a whole second, revert perspective angle to 
+										// normal - car is MOST PROBABBLY GOING STRAIGHT ..:-)
 
 	while (!_signal_recieved) //Loop read data
 	{						  //Using select to realize multi-channel communication of serial port
@@ -288,18 +303,44 @@ void readDataFromArduino(int fd)
 						rcv_buf[i-1] = rcv_buf[i];	
 					}
 					_car_speed = strtod(rcv_buf, NULL);
+
+					ticksSinceGyroDataReceived++;
+					// if we havent received gyro data for a whole second, revert perspective angle to 
+					// normal - car is MOST PROBABBLY GOING STRAIGHT ..:-)
+					if (ticksSinceGyroDataReceived > 2){
+						_rightturn_angle = 0.0;
+						_leftturn_angle = 0.0;
+					}
 				}else if (rcv_buf[0] == 'a'){
 					// move chars to the left
 					for (int  i = 1 ; i <= len ; i++){
 						rcv_buf[i-1] = rcv_buf[i];	
 					}
 					_steering_angle = strtod(rcv_buf, NULL);
+				}else if (rcv_buf[0] == 'L'){
+					// car is turning LEFT
+					ticksSinceGyroDataReceived = 0;
+					_rightturn_angle = 0.0;					
+					// move chars to the left					
+					for (int  i = 1 ; i <= len ; i++){
+						rcv_buf[i-1] = rcv_buf[i];	
+					}
+					_leftturn_angle = strtod(rcv_buf, NULL);
+				}else if (rcv_buf[0] == 'R'){
+					// car is turning RIGHT
+					ticksSinceGyroDataReceived = 0;
+					_leftturn_angle = 0.0;
+					// move chars to the left
+					for (int  i = 1 ; i <= len ; i++){
+						rcv_buf[i-1] = rcv_buf[i];	
+					}					
+					_rightturn_angle = strtod(rcv_buf, NULL);
 				}
-				//printf("speed: %f  , steering angle = %f\n", _car_speed, _steering_angle);
-
+								
+				printf("speed: %f  , steering angle = %f, , LEFT turn = %f , RIGHT turn  = %f\n", _car_speed, _steering_angle, _leftturn_angle, _rightturn_angle);
 
 			}
-			msleep(50);
+			msleep(10);
 			//auto stop = std::chrono::high_resolution_clock::now();
 			//auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
 			//printf("duration =  %ld \n", duration);
@@ -439,6 +480,149 @@ int setupCarCollisionBox(int imageWidth, int imageHeight, double ***pts, int *ou
 	arr[2][2] = 0; //z
 	arr[3][0] = (imageWidth / 2) - (pixelsHorizon / 2);
 	arr[3][1] = pixelsY; //imageHeight - pixelsY;
+	arr[3][2] = 0; //z
+
+	/* Pass pointers. */
+	*pts = arr;
+	*out = idx;
+
+	return (0);
+}
+
+
+// degrees to radians
+//There are 360 degrees in a circle. And that 360 degrees is equivalent to 2*pi radians.
+//So, converting and angle x degrees to radians is 2*pi * (x / 360). 
+// OR (pi * x / 180)
+int getRadians(int degrees){
+
+	int radians = (int) (_PI_ * degrees / 180);
+	return radians;
+}
+
+
+void get_points_noturn(int *newX, int *newY, bool isForLeftLineOfPerspective){
+    // Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
+    //The point (0,r) ends up at x=rsinθ, y=rcosθ
+    //In general, suppose that you are rotating about the origin clockwise through an angle θ
+    //Then the point (s,t) ends up at (u,v) where
+    //u=scosθ+tsinθ and v=−ssinθ+tcosθ.
+
+	double meters = _car_speed * 5 / 12;
+	double pixelsY = -9.3 * meters + 676;
+
+    float theta = 0.0;
+    if (isForLeftLineOfPerspective){
+        theta = 90 - _perspective_angle;
+	}else{
+        theta = 90 + _perspective_angle;
+	}
+    
+
+    *newX = pixelsY * sin(getRadians(theta));
+    *newY = abs(pixelsY * cos(getRadians(theta)));
+
+    if (isForLeftLineOfPerspective){
+        *newX = *newX + _perspective_originL[0];
+	}else{
+        *newX = _perspective_originR[0] - *newX;
+	}
+
+
+}
+
+void get_points_whileturning(int *newX, int newY, float theta, bool isForLeftLineOfPerspective, bool isTurningLeft){
+    // Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
+    //The point (0,r) ends up at x=rsinθ, y=rcosθ
+    //In general, suppose that you are rotating about the origin clockwise through an angle θ
+    //Then the point (s,t) ends up at (u,v) where
+    //u=scosθ+tsinθ and v=−ssinθ+tcosθ.
+
+	double meters = _car_speed * 5 / 12;
+	double pixelsY = -9.3 * meters + 676;
+
+    if (theta > 10.0){
+        theta = 10.0;
+	}
+
+
+	if (isTurningLeft){
+        if (isForLeftLineOfPerspective){ 
+            theta = 90 - _perspective_angle + theta;
+            //reduce R (distance from center oa a hypothetical circle)
+            //on the wheel that is in on the "inside" of the turning angle
+            pixelsY = pixelsY - (pixelsY * theta / 100);
+		}else{
+            theta = 90 + _perspective_angle + theta;
+            //pixelsY = pixelsY - (pixelsY * theta / 100) # and less for the "outside" wheel
+		}
+	}else{ // turnnig  right
+        if (isForLeftLineOfPerspective){ 
+            theta = 90 - _perspective_angle - theta;
+            //pixelsY = pixelsY - (pixelsY * theta / 100)
+		}else{
+            theta = 90 + _perspective_angle - theta;
+            pixelsY = pixelsY - (pixelsY * theta / 100);
+		}
+	}
+
+    *newX = pixelsY * sin(getRadians(theta));
+    *newY = abs(pixelsY * cos(getRadians(theta)));
+
+    if (isForLeftLineOfPerspective){
+        *newX = *newX + _perspective_originL[0];
+	}else{
+        *newX = _perspective_originR[0] - *newX;
+	}
+
+}
+/**
+ * Setting up the collsion box that will determinie which objects are in the
+ * path of a car
+ */
+int setupCarCollisionBoxSpeedAndAngle(int imageWidth, int imageHeight, double ***pts, int *out)
+{
+	int npoints = 4;
+	int idx = 3; // 0 to 3 (indexes of the positions array)
+	int * newX;
+	int * newY;
+
+	/* Allocate memory. */
+
+	double **arr = (double **)malloc(npoints * sizeof(double *));
+	for (int i = 0; i < npoints; i++)
+		arr[i] = (double *)malloc(2 * sizeof(double));
+
+	/* store vertices' coordinates. */
+
+	arr[0][0] = _perspective_originL[0]; //(imageWidth / 2) - (imageWidth / 4);
+	arr[0][1] = imageHeight;
+	arr[0][2] = 0; //z
+	arr[1][0] = _perspective_originR[0]; //(imageWidth / 2) + (imageWidth / 4);
+	arr[1][1] = imageHeight;
+	arr[1][2] = 0; //z
+
+	if (_rightturn_angle > 0){
+		get_points_whileturning(newX, newY, _rightturn_angle, true, false);
+	}else if (_leftturn_angle > 0){
+		get_points_whileturning(newX, newY, _leftturn_angle, true, true);
+	}else {
+		get_points_noturn(&newX, &newY,true); // get ending point for vector of the left line perspective of the collision box
+	}
+
+	arr[2][0] = *newX;
+	arr[2][1] = *newY;
+	arr[2][2] = 0; //z
+
+	if (_rightturn_angle > 0){
+		get_points_whileturning(newX, newY, _rightturn_angle, false, false);
+	}else if (_leftturn_angle > 0){
+		get_points_whileturning(newX, newY, _leftturn_angle, false, true);
+	}else {
+		get_points_noturn(newX, newY,false); // get ending point for vector of the right line perspective of the collision box
+	}
+	arr[3][0] = *newX;
+	arr[3][1] = *newY; 
 	arr[3][2] = 0; //z
 
 	/* Pass pointers. */

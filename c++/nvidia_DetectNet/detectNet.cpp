@@ -44,6 +44,8 @@
 #define CHECK_NULL_STR(x) (x != NULL) ? x : "NULL"
 //#define DEBUG_CLUSTERING
 
+bool mIsCarCollisionBoxSet;
+
 // constructor
 detectNet::detectNet(float meanPixel) : tensorNet()
 {
@@ -59,6 +61,8 @@ detectNet::detectNet(float meanPixel) : tensorNet()
 	mDetectionSets[1] = NULL; // gpu ptr
 	mDetectionSet = 0;
 	mMaxDetections = 0;
+
+	mIsCarCollisionBoxSet = false;
 }
 
 // destructor
@@ -408,6 +412,8 @@ void detectNet::SetCollisionBox(bd carCollisionBox)
 		return;
 	}
 	bdCarCollisionBox = carCollisionBox;
+
+	mIsCarCollisionBoxSet = true;
 
 	/*
 	LogInfo(LOG_TRT "detectNet -- Collision box set with %u vertices\n", bdCarCollisionBox.numpoints);
@@ -1138,7 +1144,7 @@ bool detectNet::Overlay(void *input, void *output, uint32_t width, uint32_t heig
 	}
 
 	// render the overlay of the car collision box
-	if( flags ) //(overlay != 0)
+	if( flags && mIsCarCollisionBoxSet) //(overlay != 0)
 	{
 
 		CUDA(cudaDrawLine(input, input, width, height, format,
