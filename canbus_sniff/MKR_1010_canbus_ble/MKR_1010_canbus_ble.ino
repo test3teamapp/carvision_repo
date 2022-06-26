@@ -47,7 +47,7 @@ int prevSpeed = 0;
 
 void setup() {
   Wire.begin();          // i2c dfrobot accelerometer id =  0x018
-  Serial.begin(115200);  // initialize serial communication
+  Serial.begin(9600);//115200);  // initialize serial communication
   // while (!Serial);       //starts the program if we open the serial monitor.
 
   // initialize BLE library

@@ -1066,6 +1066,25 @@ bool detectNet::Overlay(void *input, void *output, uint32_t width, uint32_t heig
 		}
 	}
 
+	// render the overlay of the car collision box
+	if( flags && mIsCarCollisionBoxSet) //(overlay != 0)
+	{
+
+		CUDA(cudaDrawLine(input, input, width, height, format,
+						  (int)bdCarCollisionBox.coord[0][0], (int)bdCarCollisionBox.coord[0][1],
+						  (int)bdCarCollisionBox.coord[3][0], (int)bdCarCollisionBox.coord[3][1],
+						  make_float4(255, 255, 255, 255), 1.5));
+        CUDA(cudaDrawLine(input, input, width, height, format,
+						  (int)bdCarCollisionBox.coord[2][0], (int)bdCarCollisionBox.coord[2][1],
+						  (int)bdCarCollisionBox.coord[1][0], (int)bdCarCollisionBox.coord[1][1],
+						  make_float4(255, 255, 255, 255), 1.5));
+        CUDA(cudaDrawLine(input, input, width, height, format,
+						  (int)bdCarCollisionBox.coord[2][0], (int)bdCarCollisionBox.coord[2][1],
+						  (int)bdCarCollisionBox.coord[3][0], (int)bdCarCollisionBox.coord[3][1],
+						  make_float4(255, 255, 255, 255), 1.5));
+       						  						  						  
+	}
+
 	// make sure there are actually detections
 	if (numDetections <= 0)
 	{
@@ -1143,24 +1162,7 @@ bool detectNet::Overlay(void *input, void *output, uint32_t width, uint32_t heig
 		font->OverlayText(output, format, width, height, labels, make_float4(255, 255, 255, 255));
 	}
 
-	// render the overlay of the car collision box
-	if( flags && mIsCarCollisionBoxSet) //(overlay != 0)
-	{
-
-		CUDA(cudaDrawLine(input, input, width, height, format,
-						  (int)bdCarCollisionBox.coord[0][0], (int)bdCarCollisionBox.coord[0][1],
-						  (int)bdCarCollisionBox.coord[3][0], (int)bdCarCollisionBox.coord[3][1],
-						  make_float4(255, 255, 255, 255), 1.5));
-        CUDA(cudaDrawLine(input, input, width, height, format,
-						  (int)bdCarCollisionBox.coord[2][0], (int)bdCarCollisionBox.coord[2][1],
-						  (int)bdCarCollisionBox.coord[1][0], (int)bdCarCollisionBox.coord[1][1],
-						  make_float4(255, 255, 255, 255), 1.5));
-        CUDA(cudaDrawLine(input, input, width, height, format,
-						  (int)bdCarCollisionBox.coord[2][0], (int)bdCarCollisionBox.coord[2][1],
-						  (int)bdCarCollisionBox.coord[3][0], (int)bdCarCollisionBox.coord[3][1],
-						  make_float4(255, 255, 255, 255), 1.5));
-       						  						  						  
-	}
+	
 
 	PROFILER_END(PROFILER_VISUALIZE);
 	return true;

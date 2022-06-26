@@ -124,7 +124,7 @@ while (1):
         line = ser.read(1)          
         line = line.decode()
         #print(line)
-        if (line == 's' or line == 'g'):
+        if (line == 's' or line == 'R' or line == 'L'):
             serialbuffer = line
         elif line == '\r':
             dataready = True

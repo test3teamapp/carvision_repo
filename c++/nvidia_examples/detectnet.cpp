@@ -45,6 +45,8 @@
 #include <jetson-utils/cudaMappedMemory.h>
 #include <math.h>
 
+#include <JetsonGPIO.h>
+
 #ifdef HEADLESS
 #define IS_HEADLESS() "headless" // run without display
 #else
@@ -59,10 +61,12 @@ double _car_speed = 0.0;
 double _steering_angle = 0.0;
 double _leftturn_angle = 0.0;
 double _rightturn_angle = 0.0;
-int _perspective_originL[2] = {200,0};
-int _perspective_originR[2] ={1080,0};
+int _perspective_originL[2] = {200,720};
+int _perspective_originR[2] ={1080,720};
 float _perspective_angle = 50.0;
 const double _PI_ = 3.14159265358979323846;
+
+int gpiopin_buzzer = 11; //USE "BOARD" PIN CONFIGURATION
 
 void sig_handler(int signo)
 {
@@ -285,7 +289,7 @@ void readDataFromArduino(int fd){
 		//auto start = std::chrono::high_resolution_clock::now(); // measuring time between receiving arduino data
 
 		fs_sel = select(fd + 1, &fs_read, NULL, NULL, &time);
-		if (fs_sel)
+		while (fs_sel)
 		{
 			len = read(fd, rcv_buf, 10); // 10 is enough for 3digitvalues for speed OR angle (including minus "-" sign)
 
@@ -337,7 +341,7 @@ void readDataFromArduino(int fd){
 					_rightturn_angle = strtod(rcv_buf, NULL);
 				}
 								
-				printf("speed: %f  , steering angle = %f, , LEFT turn = %f , RIGHT turn  = %f\n", _car_speed, _steering_angle, _leftturn_angle, _rightturn_angle);
+				//printf("speed: %f  , steering angle = %f, , LEFT turn = %f , RIGHT turn  = %f\n", _car_speed, _steering_angle, _leftturn_angle, _rightturn_angle);
 
 			}
 			msleep(10);
@@ -345,13 +349,29 @@ void readDataFromArduino(int fd){
 			//auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
 			//printf("duration =  %ld \n", duration);
 		}
-		else
-		{
-			//printf("Sorry,I am wrong!");
-		}
+		//else
+		
+		printf("Sorry, Reading from serial stopped ...!");
+		
 	}
 }
 
+// GPIO using pjueon/JetsonGPIO library, already installed in the system.
+// see Github for instructions
+
+void setupGPIO(){
+	GPIO::setmode(GPIO::BOARD); // using the "BOARD" pin configuration for identifying pins
+	//buzzer pin is OUTPUT pin
+	GPIO::setup(gpiopin_buzzer, GPIO::OUT, GPIO::LOW); //"LOW" is for starting with buzzer off
+}
+
+void soundBuzzer(int oneorzero){
+	GPIO::output(gpiopin_buzzer, oneorzero); // on/off
+}
+
+void cleanupGPIO(){
+	GPIO::cleanup();
+}
 /**
  * Crop the image received by the camera, to reduce the strain on the network
  * The cudaCrop() function uses the GPU to crop an images to a particular region of interest (ROI). 
@@ -501,7 +521,7 @@ int getRadians(int degrees){
 }
 
 
-void get_points_noturn(int *newX, int *newY, bool isForLeftLineOfPerspective){
+void get_points_noturn(int &newX, int &newY, bool isForLeftLineOfPerspective){
     // Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
     //The point (0,r) ends up at x=rsinθ, y=rcosθ
     //In general, suppose that you are rotating about the origin clockwise through an angle θ
@@ -517,21 +537,26 @@ void get_points_noturn(int *newX, int *newY, bool isForLeftLineOfPerspective){
 	}else{
         theta = 90 + _perspective_angle;
 	}
+
+	theta = _perspective_angle;
     
 
-    *newX = pixelsY * sin(getRadians(theta));
-    *newY = abs(pixelsY * cos(getRadians(theta)));
+    newX = abs(pixelsY * sin(getRadians(theta)));
+    //newY = abs(pixelsY * cos(getRadians(theta)));
 
     if (isForLeftLineOfPerspective){
-        *newX = *newX + _perspective_originL[0];
+       	newX = newX + _perspective_originL[0];				
 	}else{
-        *newX = _perspective_originR[0] - *newX;
+       	newX = _perspective_originR[0] - newX;		
 	}
 
+	newY =  pixelsY;
+	
+	printf("isForLeft: %d  , newX = %d,  newY = %d \n", isForLeftLineOfPerspective, newX, newY);
 
 }
 
-void get_points_whileturning(int *newX, int newY, float theta, bool isForLeftLineOfPerspective, bool isTurningLeft){
+void get_points_whileturning(int &newX, int &newY, float theta, bool isForLeftLineOfPerspective, bool isTurningLeft){
     // Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
     //The point (0,r) ends up at x=rsinθ, y=rcosθ
     //In general, suppose that you are rotating about the origin clockwise through an angle θ
@@ -566,13 +591,13 @@ void get_points_whileturning(int *newX, int newY, float theta, bool isForLeftLin
 		}
 	}
 
-    *newX = pixelsY * sin(getRadians(theta));
-    *newY = abs(pixelsY * cos(getRadians(theta)));
+    newX = pixelsY * sin(getRadians(theta));
+    newY = abs(pixelsY * cos(getRadians(theta)));
 
     if (isForLeftLineOfPerspective){
-        *newX = *newX + _perspective_originL[0];
+        newX = newX + _perspective_originL[0];
 	}else{
-        *newX = _perspective_originR[0] - *newX;
+        newX = _perspective_originR[0] - newX;
 	}
 
 }
@@ -584,8 +609,8 @@ int setupCarCollisionBoxSpeedAndAngle(int imageWidth, int imageHeight, double **
 {
 	int npoints = 4;
 	int idx = 3; // 0 to 3 (indexes of the positions array)
-	int * newX;
-	int * newY;
+	int newX;
+	int newY;
 
 	/* Allocate memory. */
 
@@ -602,17 +627,7 @@ int setupCarCollisionBoxSpeedAndAngle(int imageWidth, int imageHeight, double **
 	arr[1][1] = imageHeight;
 	arr[1][2] = 0; //z
 
-	if (_rightturn_angle > 0){
-		get_points_whileturning(newX, newY, _rightturn_angle, true, false);
-	}else if (_leftturn_angle > 0){
-		get_points_whileturning(newX, newY, _leftturn_angle, true, true);
-	}else {
-		get_points_noturn(&newX, &newY,true); // get ending point for vector of the left line perspective of the collision box
-	}
-
-	arr[2][0] = *newX;
-	arr[2][1] = *newY;
-	arr[2][2] = 0; //z
+	// upper right point of polygon
 
 	if (_rightturn_angle > 0){
 		get_points_whileturning(newX, newY, _rightturn_angle, false, false);
@@ -621,8 +636,22 @@ int setupCarCollisionBoxSpeedAndAngle(int imageWidth, int imageHeight, double **
 	}else {
 		get_points_noturn(newX, newY,false); // get ending point for vector of the right line perspective of the collision box
 	}
-	arr[3][0] = *newX;
-	arr[3][1] = *newY; 
+
+	arr[2][0] = newX;
+	arr[2][1] = newY;
+	arr[2][2] = 0; //z
+
+	// upper left point of polygon
+	if (_rightturn_angle > 0){
+		get_points_whileturning(newX, newY, _rightturn_angle, true, false);
+	}else if (_leftturn_angle > 0){
+		get_points_whileturning(newX, newY, _leftturn_angle, true, true);
+	}else {
+		get_points_noturn(newX, newY,true); // get ending point for vector of the left line perspective of the collision box
+	}
+
+	arr[3][0] = newX;
+	arr[3][1] = newY; 
 	arr[3][2] = 0; //z
 
 	/* Pass pointers. */
@@ -733,7 +762,7 @@ int startVision(commandLine cmdLine)
 		/* For importing openGJK this is Step 2: adapt the data structure for the
    * two bodies that will be passed to the GJK procedure. */
 
-		setupCarCollisionBox(input->GetWidth(), input->GetHeight(), &vrtx1, &nvrtx1); // 10meter long
+		setupCarCollisionBoxSpeedAndAngle(input->GetWidth(), input->GetHeight(), &vrtx1, &nvrtx1); // 10meter long
 		bdCarCollisionBox.coord = vrtx1;
 		bdCarCollisionBox.numpoints = nvrtx1;
 		/*
@@ -800,11 +829,18 @@ int startVision(commandLine cmdLine)
 				if (dd < 0.1)
 				{
 					// sound Bell
-					putchar('\07'); // a = alarm
+					//putchar('\07'); // a = alarm
 					LogVerbose("collision detected\n");
 					numOfPossibleCollisions++;
 				}
 			}
+		}
+
+		// sound buzzer
+		if (numOfPossibleCollisions > 0){
+			soundBuzzer(1);
+		}else{
+			soundBuzzer(0);
 		}
 
 		// render outputs
@@ -876,6 +912,9 @@ int main(int argc, char **argv)
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		LogError("can't catch SIGINT\n");
 
+	//setup GPIO
+	setupGPIO();
+
 	// start arduino
 	if (serialFileDescriptionArduino >= 0)
 	{
@@ -888,6 +927,8 @@ int main(int argc, char **argv)
 		//start vision
 		startVision(cmdLine);
 	}
+
+	cleanupGPIO();
 
 	// close serial port to arduino
 	if (serialFileDescriptionArduino >= 0)
