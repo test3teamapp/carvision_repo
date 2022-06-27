@@ -113,7 +113,7 @@ void get_points_noturn(int &newX, int &newY, bool isForLeftLineOfPerspective)
     // u=scosθ+tsinθ and v=−ssinθ+tcosθ.
 
     double meters = _car_speed * 5 / 12;
-    double pixelsY = 9.3 * meters ;//+ 676;
+    double pixelsY = 15 * meters ;//+ 676;
 
     float theta = 0.0;
     if (isForLeftLineOfPerspective)
@@ -141,7 +141,7 @@ void get_points_noturn(int &newX, int &newY, bool isForLeftLineOfPerspective)
 
     //newY = pixelsY;
 
-    printf("isForLeft: %d  , newX = %d,  newY = %d \n", isForLeftLineOfPerspective, newX, newY);
+    //printf("isForLeft: %d  , newX = %d,  newY = %d \n", isForLeftLineOfPerspective, newX, newY);
 }
 
 
@@ -153,7 +153,7 @@ void get_points_whileturning(int &newX, int &newY, float theta, bool isForLeftLi
     //u=scosθ+tsinθ and v=−ssinθ+tcosθ.
 
 	double meters = _car_speed * 5 / 12;
-	double pixelsY = -9.3 * meters + 676;
+	double pixelsY = 15 * meters;//-9.3 * meters + 676;
 
     if (theta > 10.0){
         theta = 10.0;
@@ -182,6 +182,8 @@ void get_points_whileturning(int &newX, int &newY, float theta, bool isForLeftLi
 
     newX = pixelsY * sin(getRadians(theta));
     newY = abs(pixelsY * cos(getRadians(theta)));
+
+    printf("isForLeft: %d  , newX = %d,  newY = %d \n", isForLeftLineOfPerspective, newX, newY);
 
     if (isForLeftLineOfPerspective){
         newX = newX + _perspective_originL[0];
@@ -297,7 +299,8 @@ void readDataFromArduino(int fd)
                     {
                         rcv_buf[i - 1] = rcv_buf[i];
                     }
-                    _rightturn_angle = strtod(rcv_buf, NULL);
+                    _rightturn_angle = strtod(rcv_buf, NULL); // it comes as negative
+                    _rightturn_angle =  abs(_rightturn_angle);
                 }
 
                 printf("speed: %f  , steering angle = %f, , LEFT turn = %f , RIGHT turn  = %f\n", _car_speed, _steering_angle, _leftturn_angle, _rightturn_angle);

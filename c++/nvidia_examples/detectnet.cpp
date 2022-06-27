@@ -25,9 +25,9 @@
 #include <string.h>
 
 #include <iostream>
-#include <fstream>  // for config file reading routine
+#include <fstream>	 // for config file reading routine
 #include <algorithm> // for config file reading routine
-#include <unistd.h> // for config file reading routine - getting the path
+#include <unistd.h>	 // for config file reading routine - getting the path
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
@@ -54,19 +54,19 @@
 #endif
 
 bool _signal_recieved = false;
-//bool is_croppedimage_mem_allocated = false;
-//uchar3 *croppedImage = NULL;
+// bool is_croppedimage_mem_allocated = false;
+// uchar3 *croppedImage = NULL;
 double _cropImagePercentage = 0.4;
 double _car_speed = 0.0;
 double _steering_angle = 0.0;
 double _leftturn_angle = 0.0;
 double _rightturn_angle = 0.0;
-int _perspective_originL[2] = {200,720};
-int _perspective_originR[2] ={1080,720};
+int _perspective_originL[2] = {200, 720};
+int _perspective_originR[2] = {1080, 720};
 float _perspective_angle = 50.0;
 const double _PI_ = 3.14159265358979323846;
 
-int gpiopin_buzzer = 11; //USE "BOARD" PIN CONFIGURATION
+int gpiopin_buzzer = 11; // USE "BOARD" PIN CONFIGURATION
 
 void sig_handler(int signo)
 {
@@ -98,7 +98,7 @@ int usage()
 // cang
 
 /* msleep(): Sleep for the requested number of milliseconds. */
-//https://stackoverflow.com/questions/1157209/is-there-an-alternative-sleep-function-in-c-to-milliseconds
+// https://stackoverflow.com/questions/1157209/is-there-an-alternative-sleep-function-in-c-to-milliseconds
 int msleep(long msec)
 {
 	struct timespec ts;
@@ -128,42 +128,45 @@ bool readConfig()
 	bool result = false;
 	char cwd[PATH_MAX];
 
-	if (getcwd(cwd, sizeof(cwd)) != NULL) {
-       printf("Current working dir: %s\n", cwd);
-   	} else {
-       perror("getcwd() error");
-       return false;
-   	}
+	if (getcwd(cwd, sizeof(cwd)) != NULL)
+	{
+		printf("Current working dir: %s\n", cwd);
+	}
+	else
+	{
+		perror("getcwd() error");
+		return false;
+	}
 
-    // std::ifstream is RAII, i.e. no need to call close
-    std::ifstream cFile;
+	// std::ifstream is RAII, i.e. no need to call close
+	std::ifstream cFile;
 	cFile.open("/home/jimbo/jetson-inference/examples/detectnet/detectnet_config.txt", std::ifstream::in);
-    if (cFile.is_open())
-    {
-        std::string line;
-        while(getline(cFile, line))
-       {
-            line.erase(std::remove_if(line.begin(), line.end(), isspace),
-                                 line.end());
-            if( line.empty() || line[0] == '#' )
-            {
-                continue;
-            }
-            auto delimiterPos = line.find("=");
-            auto name = line.substr(0, delimiterPos);
-            auto value = line.substr(delimiterPos + 1);
-            std::cout << name << " " << value << '\n';
-        }
+	if (cFile.is_open())
+	{
+		std::string line;
+		while (getline(cFile, line))
+		{
+			line.erase(std::remove_if(line.begin(), line.end(), isspace),
+					   line.end());
+			if (line.empty() || line[0] == '#')
+			{
+				continue;
+			}
+			auto delimiterPos = line.find("=");
+			auto name = line.substr(0, delimiterPos);
+			auto value = line.substr(delimiterPos + 1);
+			std::cout << name << " " << value << '\n';
+		}
 
 		result = true;
-    }
-    else 
-    {
-        std::cerr << "Couldn't open config file for reading.\n";
-    }
-	
+	}
+	else
+	{
+		std::cerr << "Couldn't open config file for reading.\n";
+	}
+
 	if (cFile.is_open())
-    {
+	{
 		cFile.close();
 	}
 
@@ -176,12 +179,12 @@ https://stackoverflow.com/questions/8941213/split-parse-and-get-value-from-a-cha
 NOT USED ANYMORE. CHANGED FORMAT OF ARDUINO INPUT TO BE SIMPLER TO PARSE
 e.g.
 
- 
+
 	example serial output from arduino:
 
-    Serial.println("s15.0");
-    Serial.println("a-2.0");
-    delay(50);
+	Serial.println("s15.0");
+	Serial.println("a-2.0");
+	delay(50);
 
 	old format was : Serial.println("s=15.0&a=-2.0");
 
@@ -189,7 +192,7 @@ e.g.
 double getTagValue(char *a_tag_list, char *a_tag)
 {
 	/* 'strtok' modifies the string. */
-	char *tag_list_copy = (char*) malloc(strlen(a_tag_list) + 1);
+	char *tag_list_copy = (char *)malloc(strlen(a_tag_list) + 1);
 	char *result = 0;
 	double numResult = 0;
 	char *s;
@@ -206,7 +209,7 @@ double getTagValue(char *a_tag_list, char *a_tag)
 			if (0 == strcmp(s, a_tag))
 			{
 				equals_sign++;
-				result = (char*) malloc(strlen(equals_sign) + 1);
+				result = (char *)malloc(strlen(equals_sign) + 1);
 				strcpy(result, equals_sign);
 			}
 		}
@@ -223,13 +226,13 @@ double getTagValue(char *a_tag_list, char *a_tag)
 Where:
 
 device
-    The path to the serial port (e.g. /dev/ttyS0)
+	The path to the serial port (e.g. /dev/ttyS0)
 fd
-    The returned file handle for the device. -1 if an error occurred
+	The returned file handle for the device. -1 if an error occurred
 O_RDWR
-    Opens the port for reading and writing
+	Opens the port for reading and writing
 O_NOCTTY
-    The port never becomes the controlling terminal of the process.
+	The port never becomes the controlling terminal of the process.
 O_NDELAY
 */
 int openPortToArduino()
@@ -249,17 +252,18 @@ int openPortToArduino()
 	return fd;
 }
 
-/* 
+/*
 	example serial output from arduino:
 
-    Serial.println("s15.0");
-    Serial.println("a-2.0");
+	Serial.println("s15.0");
+	Serial.println("a-2.0");
 	// getting the g/second from the gyroscope
 	Serial.println("L2.1");  Left turn
-    Serial.println("R-2.0"); Right turn
-    delay(50);
+	Serial.println("R-2.0"); Right turn
+	delay(50);
 */
-void readDataFromArduino(int fd){
+void readDataFromArduino(int fd)
+{
 
 	// declaring argument of time()
 	time_t my_time = time(NULL);
@@ -280,101 +284,115 @@ void readDataFromArduino(int fd){
 	int ticksSinceGyroDataReceived = 3; // Normally, we receive 3 speed measurments / second
 										// On arduino, if speed > 0 we ask for gyro data
 										// If the gyro acceleration on X axis is > 1.0, then we sent the data
-										// if we havent received gyro data for a whole second, revert perspective angle to 
+										// if we havent received gyro data for a whole second, revert perspective angle to
 										// normal - car is MOST PROBABBLY GOING STRAIGHT ..:-)
 
-	while (!_signal_recieved) //Loop read data
-	{						  //Using select to realize multi-channel communication of serial port
+	while (!_signal_recieved) // Loop read data
+	{						  // Using select to realize multi-channel communication of serial port
 
-		//auto start = std::chrono::high_resolution_clock::now(); // measuring time between receiving arduino data
+		// auto start = std::chrono::high_resolution_clock::now(); // measuring time between receiving arduino data
 
 		fs_sel = select(fd + 1, &fs_read, NULL, NULL, &time);
 		while (fs_sel)
 		{
 			len = read(fd, rcv_buf, 10); // 10 is enough for 3digitvalues for speed OR angle (including minus "-" sign)
 
-			//printf("I am right!(version1.2) len = %d fs_sel = %d\n", len, fs_sel);
+			// printf("I am right!(version1.2) len = %d fs_sel = %d\n", len, fs_sel);
 			if (len > 1)
 			{
 				rcv_buf[len] = '\0';
-				//printf("received data: %s \n", rcv_buf);
+				// printf("received data: %s \n", rcv_buf);
 				//_car_speed = getTagValue(rcv_buf, "s"); DEPRECATED FORMAT of arduino serial data
 				//_steering_angle = getTagValue(rcv_buf, "a"); DEPRECATED
 
-				if (rcv_buf[0] == 's'){
+				if (rcv_buf[0] == 's')
+				{
 					// move chars to the left
-					for (int  i = 1 ; i <= len ; i++){
-						rcv_buf[i-1] = rcv_buf[i];	
+					for (int i = 1; i <= len; i++)
+					{
+						rcv_buf[i - 1] = rcv_buf[i];
 					}
 					_car_speed = strtod(rcv_buf, NULL);
 
 					ticksSinceGyroDataReceived++;
-					// if we havent received gyro data for a whole second, revert perspective angle to 
+					// if we havent received gyro data for a whole second, revert perspective angle to
 					// normal - car is MOST PROBABBLY GOING STRAIGHT ..:-)
-					if (ticksSinceGyroDataReceived > 2){
+					if (ticksSinceGyroDataReceived > 2)
+					{
 						_rightturn_angle = 0.0;
 						_leftturn_angle = 0.0;
 					}
-				}else if (rcv_buf[0] == 'a'){
+				}
+				else if (rcv_buf[0] == 'a')
+				{
 					// move chars to the left
-					for (int  i = 1 ; i <= len ; i++){
-						rcv_buf[i-1] = rcv_buf[i];	
+					for (int i = 1; i <= len; i++)
+					{
+						rcv_buf[i - 1] = rcv_buf[i];
 					}
 					_steering_angle = strtod(rcv_buf, NULL);
-				}else if (rcv_buf[0] == 'L'){
+				}
+				else if (rcv_buf[0] == 'L')
+				{
 					// car is turning LEFT
 					ticksSinceGyroDataReceived = 0;
-					_rightturn_angle = 0.0;					
-					// move chars to the left					
-					for (int  i = 1 ; i <= len ; i++){
-						rcv_buf[i-1] = rcv_buf[i];	
+					_rightturn_angle = 0.0;
+					// move chars to the left
+					for (int i = 1; i <= len; i++)
+					{
+						rcv_buf[i - 1] = rcv_buf[i];
 					}
 					_leftturn_angle = strtod(rcv_buf, NULL);
-				}else if (rcv_buf[0] == 'R'){
+				}
+				else if (rcv_buf[0] == 'R')
+				{
 					// car is turning RIGHT
 					ticksSinceGyroDataReceived = 0;
 					_leftturn_angle = 0.0;
 					// move chars to the left
-					for (int  i = 1 ; i <= len ; i++){
-						rcv_buf[i-1] = rcv_buf[i];	
-					}					
-					_rightturn_angle = strtod(rcv_buf, NULL);
+					for (int i = 1; i <= len; i++)
+					{
+						rcv_buf[i - 1] = rcv_buf[i];
+					}
+					_rightturn_angle = strtod(rcv_buf, NULL);// it comes as negative
+                    _rightturn_angle =  abs(_rightturn_angle);
 				}
-								
-				//printf("speed: %f  , steering angle = %f, , LEFT turn = %f , RIGHT turn  = %f\n", _car_speed, _steering_angle, _leftturn_angle, _rightturn_angle);
 
+				// printf("speed: %f  , steering angle = %f, , LEFT turn = %f , RIGHT turn  = %f\n", _car_speed, _steering_angle, _leftturn_angle, _rightturn_angle);
 			}
 			msleep(10);
-			//auto stop = std::chrono::high_resolution_clock::now();
-			//auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-			//printf("duration =  %ld \n", duration);
+			// auto stop = std::chrono::high_resolution_clock::now();
+			// auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+			// printf("duration =  %ld \n", duration);
 		}
-		//else
-		
+		// else
+
 		printf("Sorry, Reading from serial stopped ...!");
-		
 	}
 }
 
 // GPIO using pjueon/JetsonGPIO library, already installed in the system.
 // see Github for instructions
 
-void setupGPIO(){
+void setupGPIO()
+{
 	GPIO::setmode(GPIO::BOARD); // using the "BOARD" pin configuration for identifying pins
-	//buzzer pin is OUTPUT pin
+	// buzzer pin is OUTPUT pin
 	GPIO::setup(gpiopin_buzzer, GPIO::OUT, GPIO::LOW); //"LOW" is for starting with buzzer off
 }
 
-void soundBuzzer(int oneorzero){
+void soundBuzzer(int oneorzero)
+{
 	GPIO::output(gpiopin_buzzer, oneorzero); // on/off
 }
 
-void cleanupGPIO(){
+void cleanupGPIO()
+{
 	GPIO::cleanup();
 }
 /**
  * Crop the image received by the camera, to reduce the strain on the network
- * The cudaCrop() function uses the GPU to crop an images to a particular region of interest (ROI). 
+ * The cudaCrop() function uses the GPU to crop an images to a particular region of interest (ROI).
  * For a more comprehensive example, see cuda-examples.py.
  * Note that the ROI rectangles are provided as (left, top, right, bottom) coordinates.
  */
@@ -387,12 +405,12 @@ bool cropImage(uchar3 *original, int inputWidth, int inputHeight, double crop_fa
 	const int2 crop_border = make_int2((1.0f - crop_factor) * 0.5f * inputWidth, (1.0f - crop_factor) * 0.5f * inputHeight);
 
 	// compute the ROI as (left, top, right, bottom)
-	//const int4 crop_roi = make_int4(crop_border.x, crop_border.y, inputWidth - crop_border.x, inputHeight - crop_border.y);
-	//const int4 crop_roi = make_int4(300, 250, 900 , 720); // for a 720p original image. Cut to the main part of FOV driving
+	// const int4 crop_roi = make_int4(crop_border.x, crop_border.y, inputWidth - crop_border.x, inputHeight - crop_border.y);
+	// const int4 crop_roi = make_int4(300, 250, 900 , 720); // for a 720p original image. Cut to the main part of FOV driving
 	const int4 crop_roi = make_int4(crop_border.x, crop_border.y * 2, inputWidth - crop_border.x, inputHeight);
 
-	//LogInfo(LOG_TRT "detectnet -- crop_border.x = %d , crop_border.y = %d\n", crop_border.x, crop_border.y);
-	//LogInfo(LOG_TRT "detectnet -- crop_roi.left = %d , crop_roi.top = %d, crop_roi.right = %d , crop_roi.bottom = %d\n", crop_roi.x, crop_roi.y, crop_roi.z, crop_roi.w);
+	// LogInfo(LOG_TRT "detectnet -- crop_border.x = %d , crop_border.y = %d\n", crop_border.x, crop_border.y);
+	// LogInfo(LOG_TRT "detectnet -- crop_roi.left = %d , crop_roi.top = %d, crop_roi.right = %d , crop_roi.bottom = %d\n", crop_roi.x, crop_roi.y, crop_roi.z, crop_roi.w);
 
 	// allocate the output image, with % of the size of the input
 	// NO NEED - CROPPPING IS DONE WITH SAVING THE CROPPED IMAGE TO THE EXISTING BUFFER
@@ -459,10 +477,10 @@ int setupCarCollisionBox(int imageWidth, int imageHeight, double ***pts, int *ou
 	// measuring actual distances in the real world,
 	// matching them with pixel counting on the image
 	// and using something like mycurvefit.com to load the data and get a function like :
-	//y = 28 + 18.25714*x - 0.3142857*x^2
+	// y = 28 + 18.25714*x - 0.3142857*x^2
 
-	//double pixelsY = 28 + 18.25714 * meters - 0.3142857 * meters * meters;
-	
+	// double pixelsY = 28 + 18.25714 * meters - 0.3142857 * meters * meters;
+
 	// y = -9.273608x + 676.0775  -- based on camera fit on car
 	double pixelsY = -9.3 * meters + 676;
 
@@ -471,13 +489,13 @@ int setupCarCollisionBox(int imageWidth, int imageHeight, double ***pts, int *ou
 
 	// use another polynomial to tranfrom the horizon srinking (in pixels)
 
-	//double pixelsHorizon = 506.2691 - 3.890255 * meters - 0.02255661 * meters * meters;
+	// double pixelsHorizon = 506.2691 - 3.890255 * meters - 0.02255661 * meters * meters;
 
 	// y = -15.16223*x + 952.276 -- based on camera fit on car
 	// y = -17.7046*x + 926.0048
 	// y = -18.57627*x + 892.7119
 	double pixelsHorizon = -18.6 * meters + 892;
-	
+
 	// seems good, but needs adjustment
 	pixelsHorizon = pixelsHorizon * 0.65;
 
@@ -491,16 +509,16 @@ int setupCarCollisionBox(int imageWidth, int imageHeight, double ***pts, int *ou
 
 	arr[0][0] = 130; //(imageWidth / 2) - (imageWidth / 4);
 	arr[0][1] = imageHeight;
-	arr[0][2] = 0; //z
+	arr[0][2] = 0;	  // z
 	arr[1][0] = 1150; //(imageWidth / 2) + (imageWidth / 4);
 	arr[1][1] = imageHeight;
-	arr[1][2] = 0; //z
+	arr[1][2] = 0; // z
 	arr[2][0] = (imageWidth / 2) + (pixelsHorizon / 2);
-	arr[2][1] = pixelsY; //imageHeight - pixelsY;
-	arr[2][2] = 0; //z
+	arr[2][1] = pixelsY; // imageHeight - pixelsY;
+	arr[2][2] = 0;		 // z
 	arr[3][0] = (imageWidth / 2) - (pixelsHorizon / 2);
-	arr[3][1] = pixelsY; //imageHeight - pixelsY;
-	arr[3][2] = 0; //z
+	arr[3][1] = pixelsY; // imageHeight - pixelsY;
+	arr[3][2] = 0;		 // z
 
 	/* Pass pointers. */
 	*pts = arr;
@@ -509,97 +527,113 @@ int setupCarCollisionBox(int imageWidth, int imageHeight, double ***pts, int *ou
 	return (0);
 }
 
-
 // degrees to radians
-//There are 360 degrees in a circle. And that 360 degrees is equivalent to 2*pi radians.
-//So, converting and angle x degrees to radians is 2*pi * (x / 360). 
+// There are 360 degrees in a circle. And that 360 degrees is equivalent to 2*pi radians.
+// So, converting and angle x degrees to radians is 2*pi * (x / 360).
 // OR (pi * x / 180)
-int getRadians(int degrees){
-
-	int radians = (int) (_PI_ * degrees / 180);
+float getRadians(int degrees)
+{
+	float radians = _PI_ * degrees / 180;
+	// printf("angle = %d / rads = %f\n", degrees, radians);
 	return radians;
 }
 
-
-void get_points_noturn(int &newX, int &newY, bool isForLeftLineOfPerspective){
-    // Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
-    //The point (0,r) ends up at x=rsinθ, y=rcosθ
-    //In general, suppose that you are rotating about the origin clockwise through an angle θ
-    //Then the point (s,t) ends up at (u,v) where
-    //u=scosθ+tsinθ and v=−ssinθ+tcosθ.
+void get_points_noturn(int &newX, int &newY, bool isForLeftLineOfPerspective)
+{
+	// Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
+	// The point (0,r) ends up at x=rsinθ, y=rcosθ
+	// In general, suppose that you are rotating about the origin clockwise through an angle θ
+	// Then the point (s,t) ends up at (u,v) where
+	// u=scosθ+tsinθ and v=−ssinθ+tcosθ.
 
 	double meters = _car_speed * 5 / 12;
-	double pixelsY = -9.3 * meters + 676;
+	double pixelsY = 15 * meters; // + 676;
 
-    float theta = 0.0;
-    if (isForLeftLineOfPerspective){
-        theta = 90 - _perspective_angle;
-	}else{
-        theta = 90 + _perspective_angle;
+	float theta = 0.0;
+	if (isForLeftLineOfPerspective)
+	{
+		theta = 90 - _perspective_angle;
+	}
+	else
+	{
+		theta = 90 + _perspective_angle;
 	}
 
-	theta = _perspective_angle;
-    
+	newX = abs(pixelsY * sin(getRadians(theta)));
+	newY = abs(pixelsY * cos(getRadians(theta)));
 
-    newX = abs(pixelsY * sin(getRadians(theta)));
-    //newY = abs(pixelsY * cos(getRadians(theta)));
-
-    if (isForLeftLineOfPerspective){
-       	newX = newX + _perspective_originL[0];				
-	}else{
-       	newX = _perspective_originR[0] - newX;		
+	if (isForLeftLineOfPerspective)
+	{
+		newX = newX + _perspective_originL[0];
+	}
+	else
+	{
+		newX = _perspective_originR[0] - newX;
 	}
 
-	newY =  pixelsY;
-	
-	printf("isForLeft: %d  , newX = %d,  newY = %d \n", isForLeftLineOfPerspective, newX, newY);
+	newY = _perspective_originR[1] - newY;
 
+	// printf("isForLeft: %d  , newX = %d,  newY = %d \n", isForLeftLineOfPerspective, newX, newY);
 }
 
-void get_points_whileturning(int &newX, int &newY, float theta, bool isForLeftLineOfPerspective, bool isTurningLeft){
-    // Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
-    //The point (0,r) ends up at x=rsinθ, y=rcosθ
-    //In general, suppose that you are rotating about the origin clockwise through an angle θ
-    //Then the point (s,t) ends up at (u,v) where
-    //u=scosθ+tsinθ and v=−ssinθ+tcosθ.
+void get_points_whileturning(int &newX, int &newY, float theta, bool isForLeftLineOfPerspective, bool isTurningLeft)
+{
+	// Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
+	// The point (0,r) ends up at x=rsinθ, y=rcosθ
+	// In general, suppose that you are rotating about the origin clockwise through an angle θ
+	// Then the point (s,t) ends up at (u,v) where
+	// u=scosθ+tsinθ and v=−ssinθ+tcosθ.
 
 	double meters = _car_speed * 5 / 12;
-	double pixelsY = -9.3 * meters + 676;
+	double pixelsY = 15 * meters; //-9.3 * meters + 676;
 
-    if (theta > 10.0){
-        theta = 10.0;
+	if (theta > 15.0)
+	{
+		theta = 15.0;
 	}
 
-
-	if (isTurningLeft){
-        if (isForLeftLineOfPerspective){ 
-            theta = 90 - _perspective_angle + theta;
-            //reduce R (distance from center oa a hypothetical circle)
-            //on the wheel that is in on the "inside" of the turning angle
-            pixelsY = pixelsY - (pixelsY * theta / 100);
-		}else{
-            theta = 90 + _perspective_angle + theta;
-            //pixelsY = pixelsY - (pixelsY * theta / 100) # and less for the "outside" wheel
+	if (isTurningLeft)
+	{
+		if (isForLeftLineOfPerspective)
+		{
+			theta = 90 - _perspective_angle + theta;
+			// reduce R (distance from center oa a hypothetical circle)
+			// on the wheel that is in on the "inside" of the turning angle
+			pixelsY = pixelsY - (pixelsY * theta / 100);
 		}
-	}else{ // turnnig  right
-        if (isForLeftLineOfPerspective){ 
-            theta = 90 - _perspective_angle - theta;
-            //pixelsY = pixelsY - (pixelsY * theta / 100)
-		}else{
-            theta = 90 + _perspective_angle - theta;
-            pixelsY = pixelsY - (pixelsY * theta / 100);
+		else
+		{
+			theta = 90 + _perspective_angle + theta;
+			// pixelsY = pixelsY - (pixelsY * theta / 100) # and less for the "outside" wheel
 		}
 	}
-
-    newX = pixelsY * sin(getRadians(theta));
-    newY = abs(pixelsY * cos(getRadians(theta)));
-
-    if (isForLeftLineOfPerspective){
-        newX = newX + _perspective_originL[0];
-	}else{
-        newX = _perspective_originR[0] - newX;
+	else
+	{ // turnnig  right
+		if (isForLeftLineOfPerspective)
+		{
+			theta = 90 - _perspective_angle + theta;
+			// pixelsY = pixelsY - (pixelsY * theta / 100)
+		}
+		else
+		{
+			theta = 90 + _perspective_angle + theta;
+			pixelsY = pixelsY - (pixelsY * theta / 100);
+		}
 	}
 
+	newX = abs(pixelsY * sin(getRadians(theta)));
+	newY = abs(pixelsY * cos(getRadians(theta)));
+
+	if (isForLeftLineOfPerspective)
+	{
+		newX = newX + _perspective_originL[0];
+	}
+	else
+	{
+		newX = _perspective_originR[0] - newX;
+	}
+
+	newY = _perspective_originR[1] - newY;
 }
 /**
  * Setting up the collsion box that will determinie which objects are in the
@@ -622,37 +656,47 @@ int setupCarCollisionBoxSpeedAndAngle(int imageWidth, int imageHeight, double **
 
 	arr[0][0] = _perspective_originL[0]; //(imageWidth / 2) - (imageWidth / 4);
 	arr[0][1] = imageHeight;
-	arr[0][2] = 0; //z
+	arr[0][2] = 0;						 // z
 	arr[1][0] = _perspective_originR[0]; //(imageWidth / 2) + (imageWidth / 4);
 	arr[1][1] = imageHeight;
-	arr[1][2] = 0; //z
+	arr[1][2] = 0; // z
 
 	// upper right point of polygon
 
-	if (_rightturn_angle > 0){
+	if (_rightturn_angle > 0)
+	{
 		get_points_whileturning(newX, newY, _rightturn_angle, false, false);
-	}else if (_leftturn_angle > 0){
+	}
+	else if (_leftturn_angle > 0)
+	{
 		get_points_whileturning(newX, newY, _leftturn_angle, false, true);
-	}else {
-		get_points_noturn(newX, newY,false); // get ending point for vector of the right line perspective of the collision box
+	}
+	else
+	{
+		get_points_noturn(newX, newY, false); // get ending point for vector of the right line perspective of the collision box
 	}
 
 	arr[2][0] = newX;
 	arr[2][1] = newY;
-	arr[2][2] = 0; //z
+	arr[2][2] = 0; // z
 
 	// upper left point of polygon
-	if (_rightturn_angle > 0){
+	if (_rightturn_angle > 0)
+	{
 		get_points_whileturning(newX, newY, _rightturn_angle, true, false);
-	}else if (_leftturn_angle > 0){
+	}
+	else if (_leftturn_angle > 0)
+	{
 		get_points_whileturning(newX, newY, _leftturn_angle, true, true);
-	}else {
-		get_points_noturn(newX, newY,true); // get ending point for vector of the left line perspective of the collision box
+	}
+	else
+	{
+		get_points_noturn(newX, newY, true); // get ending point for vector of the left line perspective of the collision box
 	}
 
 	arr[3][0] = newX;
-	arr[3][1] = newY; 
-	arr[3][2] = 0; //z
+	arr[3][1] = newY;
+	arr[3][2] = 0; // z
 
 	/* Pass pointers. */
 	*pts = arr;
@@ -675,16 +719,16 @@ int transformDetectionBoxToCollisionBox(detectNet::Detection detection, double *
 
 	arr[0][0] = detection.Left;
 	arr[0][1] = detection.Bottom;
-	arr[0][2] = 0; //z
+	arr[0][2] = 0; // z
 	arr[1][0] = detection.Right;
 	arr[1][1] = detection.Bottom;
-	arr[1][2] = 0; //z
+	arr[1][2] = 0; // z
 	arr[2][0] = detection.Right;
 	arr[2][1] = detection.Top;
-	arr[2][2] = 0; //z
+	arr[2][2] = 0; // z
 	arr[3][0] = detection.Left;
 	arr[3][1] = detection.Top;
-	arr[3][2] = 0; //z
+	arr[3][2] = 0; // z
 
 	/* Pass pointers. */
 	*pts = arr;
@@ -707,8 +751,8 @@ int startVision(commandLine cmdLine)
 	struct bd bdCarCollisionBox;
 	struct bd bdDetectedObject;
 	/* Specify name of input files for body 1 and body 2, respectively.      */
-	//char   inputfileA[40] = "userP.dat",
-	//  inputfileB[40] = "userQ.dat";
+	// char   inputfileA[40] = "userP.dat",
+	//   inputfileB[40] = "userQ.dat";
 	/* Pointers to vertices' coordinates of body 1 and body 2, respectively. */
 	double(**vrtx1) = NULL;
 	double(**vrtx2) = NULL;
@@ -745,10 +789,13 @@ int startVision(commandLine cmdLine)
 
 	// parse overlay flags
 	uint32_t overlayFlags;
-	if (!output){
+	if (!output)
+	{
 		overlayFlags = 0;
-	}else{
-	 overlayFlags = detectNet::OverlayFlagsFromStr(cmdLine.GetString("overlay", "box,labels,conf"));
+	}
+	else
+	{
+		overlayFlags = detectNet::OverlayFlagsFromStr(cmdLine.GetString("overlay", "box,labels,conf"));
 	}
 
 	int widthOfImageToBeProcessed;
@@ -760,21 +807,24 @@ int startVision(commandLine cmdLine)
 	{
 
 		/* For importing openGJK this is Step 2: adapt the data structure for the
-   * two bodies that will be passed to the GJK procedure. */
-
-		setupCarCollisionBoxSpeedAndAngle(input->GetWidth(), input->GetHeight(), &vrtx1, &nvrtx1); // 10meter long
-		bdCarCollisionBox.coord = vrtx1;
-		bdCarCollisionBox.numpoints = nvrtx1;
-		/*
-	for (int i = 0; i <= bdCarCollisionBox.numpoints; i++)
-	{
-		LogInfo(LOG_TRT "detectnet -- x = %f , y = %f\n", bdCarCollisionBox.coord[i][0], bdCarCollisionBox.coord[i][1]);
-	}
-*/
-		if (output != NULL){
-			// this is only for displying the collision box area. 
-			// Actual calculations is done in this code file
-			net->SetCollisionBox(bdCarCollisionBox);
+		 * two bodies that will be passed to the GJK procedure. */
+		if (_car_speed > 0)
+		{
+			setupCarCollisionBoxSpeedAndAngle(input->GetWidth(), input->GetHeight(), &vrtx1, &nvrtx1); // 10meter long
+			bdCarCollisionBox.coord = vrtx1;
+			bdCarCollisionBox.numpoints = nvrtx1;
+			/*
+		for (int i = 0; i <= bdCarCollisionBox.numpoints; i++)
+		{
+			LogInfo(LOG_TRT "detectnet -- x = %f , y = %f\n", bdCarCollisionBox.coord[i][0], bdCarCollisionBox.coord[i][1]);
+		}
+	*/
+			if (output != NULL)
+			{
+				// this is only for displying the collision box area.
+				// Actual calculations is done in this code file
+				net->SetCollisionBox(bdCarCollisionBox);
+			}
 		}
 		// capture next image image
 		uchar3 *image = NULL;
@@ -809,37 +859,43 @@ int startVision(commandLine cmdLine)
 
 		int numOfPossibleCollisions = 0;
 
-		if (numDetections > 0)
+		if (_car_speed > 0)
 		{
-			//LogVerbose("%i objects detected\n", numDetections);
-
-			for (int n = 0; n < numDetections; n++) // calculate possible collision
+			if (numDetections > 0)
 			{
-				//LogVerbose("detected obj %i  class #%u (%s)  confidence=%f\n", n, detections[n].ClassID, net->GetClassDesc(detections[n].ClassID), detections[n].Confidence);
-				//LogVerbose("bounding box %i  (%f, %f)  (%f, %f)  w=%f  h=%f\n", n, detections[n].Left, detections[n].Top, detections[n].Right, detections[n].Bottom, detections[n].Width(), detections[n].Height());
-				transformDetectionBoxToCollisionBox(detections[n], &vrtx1, &nvrtx1); //
-				bdDetectedObject.coord = vrtx1;
-				bdDetectedObject.numpoints = nvrtx1;
-				/* Initialise simplex as empty */
-				simplexStructForGJK.nvrtx = 0;
-				/* For importing openGJK this is Step 3: invoke the GJK procedure. */
-				/* Compute squared distance using GJK algorithm. */
-				dd = gjk(bdCarCollisionBox, bdDetectedObject, &simplexStructForGJK);
+				// LogVerbose("%i objects detected\n", numDetections);
 
-				if (dd < 0.1)
+				for (int n = 0; n < numDetections; n++) // calculate possible collision
 				{
-					// sound Bell
-					//putchar('\07'); // a = alarm
-					LogVerbose("collision detected\n");
-					numOfPossibleCollisions++;
+					// LogVerbose("detected obj %i  class #%u (%s)  confidence=%f\n", n, detections[n].ClassID, net->GetClassDesc(detections[n].ClassID), detections[n].Confidence);
+					// LogVerbose("bounding box %i  (%f, %f)  (%f, %f)  w=%f  h=%f\n", n, detections[n].Left, detections[n].Top, detections[n].Right, detections[n].Bottom, detections[n].Width(), detections[n].Height());
+					transformDetectionBoxToCollisionBox(detections[n], &vrtx1, &nvrtx1); //
+					bdDetectedObject.coord = vrtx1;
+					bdDetectedObject.numpoints = nvrtx1;
+					/* Initialise simplex as empty */
+					simplexStructForGJK.nvrtx = 0;
+					/* For importing openGJK this is Step 3: invoke the GJK procedure. */
+					/* Compute squared distance using GJK algorithm. */
+					dd = gjk(bdCarCollisionBox, bdDetectedObject, &simplexStructForGJK);
+
+					if (dd < 0.1)
+					{
+						// sound Bell
+						// putchar('\07'); // a = alarm
+						LogVerbose("collision detected\n");
+						numOfPossibleCollisions++;
+					}
 				}
 			}
 		}
 
 		// sound buzzer
-		if (numOfPossibleCollisions > 0){
+		if (numOfPossibleCollisions > 0)
+		{
 			soundBuzzer(1);
-		}else{
+		}
+		else
+		{
 			soundBuzzer(0);
 		}
 
@@ -850,9 +906,9 @@ int startVision(commandLine cmdLine)
 
 			// update the status bar
 			char str[256];
-			//sprintf(str, "TensorRT %i.%i.%i | %s | Network %.0f FPS | Possible Collisions %i ", NV_TENSORRT_MAJOR, NV_TENSORRT_MINOR, NV_TENSORRT_PATCH, precisionTypeToStr(net->GetPrecision()), net->GetNetworkFPS(), numOfPossibleCollisions);
+			// sprintf(str, "TensorRT %i.%i.%i | %s | Network %.0f FPS | Possible Collisions %i ", NV_TENSORRT_MAJOR, NV_TENSORRT_MINOR, NV_TENSORRT_PATCH, precisionTypeToStr(net->GetPrecision()), net->GetNetworkFPS(), numOfPossibleCollisions);
 			sprintf(str, " %.0f FPS | Collisions %i | car speed  %.0f ", net->GetNetworkFPS(), numOfPossibleCollisions, _car_speed);
-			
+
 			output->SetStatus(str);
 
 			// check if the user quit
@@ -861,7 +917,7 @@ int startVision(commandLine cmdLine)
 		}
 
 		// print out timing info
-		//net->PrintProfilerTimes();
+		// net->PrintProfilerTimes();
 	}
 
 	/*
@@ -875,7 +931,7 @@ int startVision(commandLine cmdLine)
 	for (int i = 0; i < bdDetectedObject.numpoints; i++)
 		free(bdDetectedObject.coord[i]);
 	free(bdDetectedObject.coord);
-	//CUDA(cudaFreeHost(croppedImage));
+	// CUDA(cudaFreeHost(croppedImage));
 
 	LogVerbose("detectnet:  shutting down...\n");
 
@@ -891,7 +947,8 @@ int main(int argc, char **argv)
 
 	LogVerbose("detectnet:  starting.\n");
 
-	if ( ! readConfig()){
+	if (!readConfig())
+	{
 		LogError("can't read config file\n");
 		return 0;
 	}
@@ -912,19 +969,19 @@ int main(int argc, char **argv)
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 		LogError("can't catch SIGINT\n");
 
-	//setup GPIO
+	// setup GPIO
 	setupGPIO();
 
 	// start arduino
 	if (serialFileDescriptionArduino >= 0)
 	{
-		//readDataFromArduino(serialFileDescriptionArduino);
+		// readDataFromArduino(serialFileDescriptionArduino);
 		std::thread thread_Arduino(readDataFromArduino, serialFileDescriptionArduino);
-		//thread_Arduino.join(); // IF WE JOIN THIS THREAD, thew program is stuck in the 
-								// loop of the thread reading the arduino and does not
-								// continue to start the vision task 
+		// thread_Arduino.join(); // IF WE JOIN THIS THREAD, thew program is stuck in the
+		//  loop of the thread reading the arduino and does not
+		//  continue to start the vision task
 
-		//start vision
+		// start vision
 		startVision(cmdLine);
 	}
 
