@@ -13,7 +13,7 @@
 #include <thread>
 #include <signal.h>
 #include <math.h>
-#include <Winsock.h>
+
 
 bool _signal_recieved = false;
 double _car_speed = 0.0;
@@ -74,7 +74,7 @@ O_NDELAY
 int openPortToArduino()
 {
     const char device[] = "/dev/ttyACM0"; // "/dev/ttyUSB0"; // for arduino mkr 1010 the port shows as ttyACM0
-    int fd = open(device, O_RDWR); // not working on windows | O_NOCTTY | O_NDELAY);
+    int fd = open(device, O_RDWR| O_NOCTTY | O_NDELAY);
     if (fd == -1)
     {
         printf("failed to open port to arduino \n");
@@ -87,6 +87,110 @@ int openPortToArduino()
     // Return the file handler
     return fd;
 }
+
+
+// degrees to radians
+// There are 360 degrees in a circle. And that 360 degrees is equivalent to 2*pi radians.
+// So, converting and angle x degrees to radians is 2*pi * (x / 360).
+// OR (pi * x / 180)
+float getRadians(int degrees)
+{
+
+    float radians = _PI_ * degrees / 180;
+
+
+    printf("angle = %d / rads = %f\n", degrees, radians);
+
+    return radians;
+}
+
+void get_points_noturn(int &newX, int &newY, bool isForLeftLineOfPerspective)
+{
+    // Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
+    // The point (0,r) ends up at x=rsinθ, y=rcosθ
+    // In general, suppose that you are rotating about the origin clockwise through an angle θ
+    // Then the point (s,t) ends up at (u,v) where
+    // u=scosθ+tsinθ and v=−ssinθ+tcosθ.
+
+    double meters = _car_speed * 5 / 12;
+    double pixelsY = 9.3 * meters ;//+ 676;
+
+    float theta = 0.0;
+    if (isForLeftLineOfPerspective)
+    {
+        theta = 90 - _perspective_angle;
+    }
+    else
+    {
+        theta = 90 + _perspective_angle;
+    }
+
+    //theta = _perspective_angle;
+
+    newX = abs(pixelsY * sin(getRadians(theta)));
+    newY = abs(pixelsY * cos(getRadians(theta)));
+
+    if (isForLeftLineOfPerspective)
+    {
+        newX = newX + _perspective_originL[0];
+    }
+    else
+    {
+        newX = _perspective_originR[0] - newX;
+    }
+
+    //newY = pixelsY;
+
+    printf("isForLeft: %d  , newX = %d,  newY = %d \n", isForLeftLineOfPerspective, newX, newY);
+}
+
+
+void get_points_whileturning(int &newX, int &newY, float theta, bool isForLeftLineOfPerspective, bool isTurningLeft){
+    // Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
+    //The point (0,r) ends up at x=rsinθ, y=rcosθ
+    //In general, suppose that you are rotating about the origin clockwise through an angle θ
+    //Then the point (s,t) ends up at (u,v) where
+    //u=scosθ+tsinθ and v=−ssinθ+tcosθ.
+
+	double meters = _car_speed * 5 / 12;
+	double pixelsY = -9.3 * meters + 676;
+
+    if (theta > 10.0){
+        theta = 10.0;
+	}
+
+
+	if (isTurningLeft){
+        if (isForLeftLineOfPerspective){ 
+            theta = 90 - _perspective_angle + theta;
+            //reduce R (distance from center oa a hypothetical circle)
+            //on the wheel that is in on the "inside" of the turning angle
+            pixelsY = pixelsY - (pixelsY * theta / 100);
+		}else{
+            theta = 90 + _perspective_angle + theta;
+            //pixelsY = pixelsY - (pixelsY * theta / 100) # and less for the "outside" wheel
+		}
+	}else{ // turnnig  right
+        if (isForLeftLineOfPerspective){ 
+            theta = 90 - _perspective_angle - theta;
+            //pixelsY = pixelsY - (pixelsY * theta / 100)
+		}else{
+            theta = 90 + _perspective_angle - theta;
+            pixelsY = pixelsY - (pixelsY * theta / 100);
+		}
+	}
+
+    newX = pixelsY * sin(getRadians(theta));
+    newY = abs(pixelsY * cos(getRadians(theta)));
+
+    if (isForLeftLineOfPerspective){
+        newX = newX + _perspective_originL[0];
+	}else{
+        newX = _perspective_originR[0] - newX;
+	}
+
+}
+
 
 /*
     example serial output from arduino:
@@ -196,7 +300,7 @@ void readDataFromArduino(int fd)
                     _rightturn_angle = strtod(rcv_buf, NULL);
                 }
 
-                // printf("speed: %f  , steering angle = %f, , LEFT turn = %f , RIGHT turn  = %f\n", _car_speed, _steering_angle, _leftturn_angle, _rightturn_angle);
+                printf("speed: %f  , steering angle = %f, , LEFT turn = %f , RIGHT turn  = %f\n", _car_speed, _steering_angle, _leftturn_angle, _rightturn_angle);
 
                 // upper right point of polygon
 
@@ -236,104 +340,6 @@ void readDataFromArduino(int fd)
 
         printf("Sorry, Reading from serial stopped ...!");
     }
-}
-
-// degrees to radians
-// There are 360 degrees in a circle. And that 360 degrees is equivalent to 2*pi radians.
-// So, converting and angle x degrees to radians is 2*pi * (x / 360).
-// OR (pi * x / 180)
-int getRadians(int degrees)
-{
-
-    int radians = (int)(_PI_ * degrees / 180);
-    return radians;
-}
-
-void get_points_noturn(int &newX, int &newY, bool isForLeftLineOfPerspective)
-{
-    // Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
-    // The point (0,r) ends up at x=rsinθ, y=rcosθ
-    // In general, suppose that you are rotating about the origin clockwise through an angle θ
-    // Then the point (s,t) ends up at (u,v) where
-    // u=scosθ+tsinθ and v=−ssinθ+tcosθ.
-
-    double meters = _car_speed * 5 / 12;
-    double pixelsY = -9.3 * meters + 676;
-
-    float theta = 0.0;
-    if (isForLeftLineOfPerspective)
-    {
-        theta = 90 - _perspective_angle;
-    }
-    else
-    {
-        theta = 90 + _perspective_angle;
-    }
-
-    theta = _perspective_angle;
-
-    newX = abs(pixelsY * sin(getRadians(theta)));
-    // newY = abs(pixelsY * cos(getRadians(theta)));
-
-    if (isForLeftLineOfPerspective)
-    {
-        newX = newX + _perspective_originL[0];
-    }
-    else
-    {
-        newX = _perspective_originR[0] - newX;
-    }
-
-    newY = pixelsY;
-
-    printf("isForLeft: %d  , newX = %d,  newY = %d \n", isForLeftLineOfPerspective, newX, newY);
-}
-
-
-void get_points_whileturning(int &newX, int &newY, float theta, bool isForLeftLineOfPerspective, bool isTurningLeft){
-    // Any point (x,y) on the path of the circle is x=r∗sin(θ),y=r∗cos(θ)
-    //The point (0,r) ends up at x=rsinθ, y=rcosθ
-    //In general, suppose that you are rotating about the origin clockwise through an angle θ
-    //Then the point (s,t) ends up at (u,v) where
-    //u=scosθ+tsinθ and v=−ssinθ+tcosθ.
-
-	double meters = _car_speed * 5 / 12;
-	double pixelsY = -9.3 * meters + 676;
-
-    if (theta > 10.0){
-        theta = 10.0;
-	}
-
-
-	if (isTurningLeft){
-        if (isForLeftLineOfPerspective){ 
-            theta = 90 - _perspective_angle + theta;
-            //reduce R (distance from center oa a hypothetical circle)
-            //on the wheel that is in on the "inside" of the turning angle
-            pixelsY = pixelsY - (pixelsY * theta / 100);
-		}else{
-            theta = 90 + _perspective_angle + theta;
-            //pixelsY = pixelsY - (pixelsY * theta / 100) # and less for the "outside" wheel
-		}
-	}else{ // turnnig  right
-        if (isForLeftLineOfPerspective){ 
-            theta = 90 - _perspective_angle - theta;
-            //pixelsY = pixelsY - (pixelsY * theta / 100)
-		}else{
-            theta = 90 + _perspective_angle - theta;
-            pixelsY = pixelsY - (pixelsY * theta / 100);
-		}
-	}
-
-    newX = pixelsY * sin(getRadians(theta));
-    newY = abs(pixelsY * cos(getRadians(theta)));
-
-    if (isForLeftLineOfPerspective){
-        newX = newX + _perspective_originL[0];
-	}else{
-        newX = _perspective_originR[0] - newX;
-	}
-
 }
 
 
