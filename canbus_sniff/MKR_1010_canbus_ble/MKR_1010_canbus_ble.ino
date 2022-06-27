@@ -24,6 +24,8 @@ BLEUnsignedIntCharacteristic speedReading("0000dd31-76d9-48e9-aa47-d0538d18f701"
 BLEUnsignedIntCharacteristic pitchReading("0000dd32-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);    // creating the pitch angle Value characteristic
 BLEUnsignedIntCharacteristic rpmReading("0000dd33-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);      // creating the rpm Value characteristic
 BLEUnsignedIntCharacteristic headingReading("0000dd34-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);  // creating the heading angle Value characteristic
+BLEFloatCharacteristic gyroXReading("0000dd35-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);  // creating the heading angle Value characteristic
+
 
 long currentMillis = 0;
 long previousMillis = 0;
@@ -35,6 +37,7 @@ BLEDevice central;
 bool bleClientConnected = false;
 bool newCanbusData = false;
 int heading_int, pitch_int, roll_int;
+float gyro_x_accel = 0.0;
 int lastPitchReadings[3];  // using them in fifo mode to identify the trend
 int lastHeadingReadings[3];
 
@@ -103,6 +106,7 @@ void setup() {
   carService.addCharacteristic(pitchReading);
   carService.addCharacteristic(headingReading);
   carService.addCharacteristic(rpmReading);
+  carService.addCharacteristic(gyroXReading);
 
   BLE.addService(carService);  // adding the service
 
@@ -110,6 +114,7 @@ void setup() {
   pitchReading.writeValue(0);
   headingReading.writeValue(0);
   rpmReading.writeValue(0);
+  gyroXReading.writeValue(0.0);
 
   BLE.advertise();  // start advertising the service
   Serial.println("Bluetooth device active, waiting for connections...");
@@ -183,8 +188,9 @@ void loop() {
           acceleration();
 
           if (central && central.connected()) {
-            headingReading.writeValue(heading_int);
-            pitchReading.writeValue(pitch_int);
+            //headingReading.writeValue(heading_int);
+            //pitchReading.writeValue(pitch_int);
+            gyroXReading.writeValue(gyro_x_accel);
           }
         }
       }
@@ -268,21 +274,18 @@ void acceleration(void) {
 
   }
 */
-  float x, y, z;
+  float gyro_x_accel, y, z;
   if (IMU.gyroscopeAvailable()) {
     IMU.readGyroscope(x, y, z);
-    if (x > 1.0 || x < -1) {
+    if (gyro_x_accel > 1.0 || gyro_x_accel < -1) { // send to jetson. only above a threshold
       if (x > 0) {
         Serial.print("L");
       } else {
         Serial.print("R");
       }
-      Serial.println(x);
-      //Serial.println('\t');
-    }
-    /*else {
-      Serial.println("g0");
-    }*/
+      Serial.println(gyro_x_accel);
+      //Serial.println('\t');      
+    } 
     //Serial.print(y);
     //Serial.print('\t');
     //Serial.println(z);
