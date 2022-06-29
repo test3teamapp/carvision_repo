@@ -38,18 +38,29 @@ bool bleClientConnected = false;
 float gyro_x_accel = 0.0;
 float gyro_y_accel = 0.0;
 
+//PINS USED
+// CAN BUS : D3, B8, D9, D10
+// IMU SHILED : D11 (SDA), D12 (SCL)
+// TRIGGER PIN FOR POWERING ON JETSON USING RELAY
+#define RELAY_PIN 6
 
 //timekeepeing
 #define seconds() (millis() / 1000)
 // dummy speed;
 int prevSpeed = 0;
 
+bool isCarEngineRunning = false;
+long secondsOfLastRPMCanMsg;
+
 //DFRobot_LIS2DH12 LIS; // Accelerometer
 
 void setup() {
   Wire.begin();        // i2c dfrobot accelerometer id =  0x018
   Serial.begin(9600);  //115200);  // initialize serial communication
-  // while (!Serial);       //starts the program if we open the serial monitor.
+
+  // RELAY for powering Jetson.
+  pinMode(RELAY_PIN, OUTPUT);    //Set pin RELAY_PIN as an 'output' pin
+  digitalWrite(RELAY_PIN, LOW);  // CIRCUIT IS OPEN on startup
 
   // initialize BLE library
   if (!BLE.begin()) {
@@ -87,13 +98,14 @@ void setup() {
   Serial.println("Bluetooth device active, waiting for connections...");
   // previousMillis = millis();
   bleClientConnected = false;
+  isCarEngineRunning = false;
 
   //time
   Serial.println(seconds());
 }
 
 void loop() {
-
+/*
   // dummy speed
   int speed = (seconds() % 10) * 10;
   // -----
@@ -116,6 +128,7 @@ void loop() {
   }
   //currentMillis = millis();
   // ------
+  */
 
   if (!central) {
     central = BLE.central();  // wait for a BLE central
@@ -157,6 +170,16 @@ void loop() {
           // read accelaration data
           acceleration();
         }
+        
+        // check if the engine is stopped.
+        if (seconds() - secondsOfLastRPMCanMsg > 5) {
+          // we haven;t received RPMs for 5 seconds. Engine must have stopped.
+          // stop jetson
+          isCarEngineRunning = false;
+          digitalWrite(RELAY_PIN, LOW);
+          canbus_rpm = 0;
+        }
+
         if (central && central.connected()) {
           CAR_DATA_SLOWRATE.writeValue(String("s" + String(canbus_speed) + ",r" + String(canbus_rpm) + ",gx" + String(gyro_x_accel) + ",gy" + String(gyro_y_accel)));
         }
@@ -200,7 +223,14 @@ void loop() {
       Serial.print("r");
       Serial.print(canbus_rpm);
       Serial.println();
-      // newCanbusData = true;
+      if (!isCarEngineRunning) {
+        if (canbus_rpm > 0) {
+          // close the relay circuit to power up jetson
+          isCarEngineRunning = true;
+          digitalWrite(RELAY_PIN, HIGH);
+        }
+      }
+      secondsOfLastRPMCanMsg = seconds();
       if (central && central.connected()) {
         // don't send anything
       }
