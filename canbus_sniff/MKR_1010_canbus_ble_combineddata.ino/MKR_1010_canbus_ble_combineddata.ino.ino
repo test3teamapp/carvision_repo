@@ -23,12 +23,8 @@ BLEService carService("0000dd30-76d9-48e9-aa47-d0538d18f701");  // creating the 
 // No more that 4 services are shown on the android app we use.
 // So, combining the data in 2 services (string)
 // CAR_DATA_SLOWRATE_UUID / CAR_DATA_FASTRATE_UUID
-BLEUnsignedIntCharacteristic CAR_DATA_SLOWRATE("0000dd31-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);    // creating the Speed Value characteristic
-BLEUnsignedIntCharacteristic CAR_DATA_FASTRATE("0000dd32-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);    // creating the pitch angle Value characteristic
-//BLEUnsignedIntCharacteristic rpmReading("0000dd33-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);      // creating the rpm Value characteristic
-//BLEUnsignedIntCharacteristic headingReading("0000dd34-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);  // creating the heading angle Value characteristic
-//BLEFloatCharacteristic gyroXReading("0000dd35-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);          // creating the gyro X accel angle Value characteristic
-//BLEFloatCharacteristic gyroYReading("0000dd36-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);          // creating the gyro Y accel angle Value characteristic
+BLEStringCharacteristic CAR_DATA_SLOWRATE("0000dd31-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify, 50);  // creating the String combined data characteristic.Max string length 50
+BLEStringCharacteristic CAR_DATA_FASTRATE("0000dd32-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify, 50);
 
 
 long currentMillis = 0;
@@ -39,12 +35,9 @@ int canbus_rpm = 0;
 int canbus_dataload[8];
 BLEDevice central;
 bool bleClientConnected = false;
-bool newCanbusData = false;
-int heading_int, pitch_int, roll_int;
 float gyro_x_accel = 0.0;
 float gyro_y_accel = 0.0;
-int lastPitchReadings[3];  // using them in fifo mode to identify the trend
-int lastHeadingReadings[3];
+
 
 //timekeepeing
 #define seconds() (millis() / 1000)
@@ -79,55 +72,21 @@ void setup() {
       ;
   }
 
-  /*
-  Serial.print("Accelerometer sample rate = ");
-  Serial.print(IMU.accelerationSampleRate());
-  Serial.println(" Hz");
-  Serial.print("Acceleration in G's ");
-  Serial.println("X\tY\tZ");
-  Serial.print("Gyroscope sample rate = ");
-  Serial.print(IMU.gyroscopeSampleRate());
-  Serial.println(" Hz");
-  Serial.print("Gyroscope in degrees/second ");
-  Serial.println("X\tY\tZ");
-  Serial.print("Euler Angles sample rate = ");
-  Serial.print(IMU.eulerAnglesSampleRate());
-  Serial.println(" Hz");
-  Serial.print("Euler Angles in degrees ");
-  Serial.println("Heading\tRoll\tPitch");
-*/
-  // feeding the movement trending arrays;
-
-  for (int i = 0; i < 3; i++) {
-    acceleration();
-    lastPitchReadings[i] = pitch_int;
-    lastHeadingReadings[i] = heading_int;
-  }
 
   BLE.setLocalName("MYSERVICE");  // Setting a name that will appear when scanning for bluetooth devices
   BLE.setAdvertisedService(carService);
 
-  carService.addCharacteristic(speedReading);  // add characteristics to a service
-  //carService.addCharacteristic(pitchReading);
-  //carService.addCharacteristic(headingReading);
-  carService.addCharacteristic(rpmReading);
-  carService.addCharacteristic(gyroXReading);
-  carService.addCharacteristic(gyroYReading);
+  carService.addCharacteristic(CAR_DATA_SLOWRATE);  // add characteristics to a service
+  carService.addCharacteristic(CAR_DATA_FASTRATE);
 
   BLE.addService(carService);  // adding the service
 
-  speedReading.writeValue(0);  // set initial value for characteristics
-  //pitchReading.writeValue(0);
-  //headingReading.writeValue(0);
-  rpmReading.writeValue(0);
-  gyroXReading.writeValue(0.0);
-  gyroYReading.writeValue(0.0);
+  //CAR_DATA_SLOWRATE.writeValue("s0,r0,gx0.0,gy0.0");
 
   BLE.advertise();  // start advertising the service
   Serial.println("Bluetooth device active, waiting for connections...");
   // previousMillis = millis();
   bleClientConnected = false;
-  newCanbusData = false;
 
   //time
   Serial.println(seconds());
@@ -136,29 +95,30 @@ void setup() {
 void loop() {
 
   // dummy speed
-  // -----
   int speed = (seconds() % 10) * 10;
+  // -----
+  // test
+  //  read accelaration data
+  delay(50);
+  acceleration();
+  if (central && central.connected()) {
+    CAR_DATA_FASTRATE.writeValue(String("s" + String(speed) + ",r" + String(canbus_rpm) + ",gx" + String(gyro_x_accel) + ",gy" + String(gyro_y_accel)));
+  }
+
   if (speed != prevSpeed) {
     prevSpeed = speed;
     Serial.print("s");
     Serial.println(speed);
     if (central && central.connected()) {
-      //headingReading.writeValue(heading_int);
-      //pitchReading.writeValue(pitch_int);
-      speedReading.writeValue(speed);
-      gyroXReading.writeValue(gyro_x_accel);
-      gyroYReading.writeValue(gyro_y_accel);
+
+      CAR_DATA_SLOWRATE.writeValue(String("s" + String(speed) + ",r" + String(canbus_rpm) + ",gx" + String(gyro_x_accel) + ",gy" + String(gyro_y_accel)));
     }
   }
   //currentMillis = millis();
   // ------
 
   if (!central) {
-    // wait for the first 10 seconds to connect to ble
-    // if (currentMillis - previousMillis < 10000){
     central = BLE.central();  // wait for a BLE central
-
-    // }
   }
   // do the main can-bus sniffing
   // try to parse packet
@@ -167,7 +127,6 @@ void loop() {
 
   if (packetSize) {
 
-    newCanbusData = false;
     // received a packet
     // Serial.print("Received ");
     // if (CAN.packetExtended()) {
@@ -194,19 +153,12 @@ void loop() {
         Serial.print("s");
         Serial.print(canbus_speed);
         Serial.println();
-        if (central && central.connected()) {
-          speedReading.writeValue(canbus_speed);
-        }
         if (canbus_speed > 0) {
           // read accelaration data
           acceleration();
-
-          if (central && central.connected()) {
-            //headingReading.writeValue(heading_int);
-            //pitchReading.writeValue(pitch_int);
-            gyroXReading.writeValue(gyro_x_accel);
-            gyroYReading.writeValue(gyro_y_accel);
-          }
+        }
+        if (central && central.connected()) {
+          CAR_DATA_SLOWRATE.writeValue(String("s" + String(canbus_speed) + ",r" + String(canbus_rpm) + ",gx" + String(gyro_x_accel) + ",gy" + String(gyro_y_accel)));
         }
       }
     } else if (CAN.packetId() == 0x260) {
@@ -228,7 +180,7 @@ void loop() {
         Serial.println();
         // newCanbusData = true;
         if (central && central.connected()) {
-          //pitchReading.writeValue(canbus_steeringangle);
+          // don't send anything
         }
       }
 
@@ -250,14 +202,11 @@ void loop() {
       Serial.println();
       // newCanbusData = true;
       if (central && central.connected()) {
-        rpmReading.writeValue(canbus_rpm);
+        // don't send anything
       }
     }
   }
 
-  // test
-  //  read accelaration data
-  acceleration();
 
   if (central && central.connected()) {  // if a central is connected to the peripheral
     // Serial.print("Connected to central: ");
@@ -275,20 +224,7 @@ void loop() {
  */
 void acceleration(void) {
   // delay(50);
-  /*
-  float x, y, z;
 
-  if (IMU.accelerationAvailable())
-  {
-    IMU.readAcceleration(x, y, z);    
-    Serial.print(x);
-    Serial.print('\t');
-    //Serial.print(y);
-    //Serial.print('\t');
-    //Serial.println(z);
-
-  }
-*/
   float z;
   if (IMU.gyroscopeAvailable()) {
     IMU.readGyroscope(gyro_x_accel, gyro_y_accel, z);
@@ -315,61 +251,4 @@ void acceleration(void) {
     //Serial.print('\t');
     //Serial.println(z);
   }
-  /*
-  float heading, roll, pitch;
-
-  if (IMU.eulerAnglesAvailable()) {
-    IMU.readEulerAngles(heading, roll, pitch);
-    heading_int = heading;
-    pitch_int = pitch;
-    // move everything in the arrays one position forward.
-    for (int i = 1; i > -1; i--) {
-      lastPitchReadings[i + 1] = lastPitchReadings[i];
-      lastHeadingReadings[i + 1] = lastHeadingReadings[i];
-    }
-    // add the new value at 0 position
-    lastPitchReadings[0] = pitch_int;
-    lastHeadingReadings[0] = heading_int;
-    // calculate trend
-    // NOT THE MEDIAN, maybe the mean
-    //int medianPitch = QuickMedian<int>::GetMedian(lastPitchReadings, valuesInt10Length);
-    //int medianHeading = QuickMedian<int>::GetMedian(lastHeadingReadings, valuesInt10Length);
-    int turnIndication = 0;  // 0 = no turn, +1 = right turn, -1 = left turn
-    int diffHeading = 0;
-    if (lastHeadingReadings[1] >= 0 && lastHeadingReadings[1] <= 90 && lastHeadingReadings[0] <= 359 && lastHeadingReadings[0] >= 270) {
-      turnIndication = -1;
-    } else if (lastHeadingReadings[0] >= 0 && lastHeadingReadings[0] <= 90 && lastHeadingReadings[1] <= 359 && lastHeadingReadings[1] >= 270) {
-      turnIndication = 1;
-    } else if (lastHeadingReadings[0] < lastHeadingReadings[1]) {
-      turnIndication = -1;
-    } else if (lastHeadingReadings[0] > lastHeadingReadings[1]) {
-      turnIndication = 1;
-    }
-
-    if (turnIndication < 0) {
-      Serial.print("LEFT \t");
-      Serial.print(x); //gyro accel
-      Serial.print('\t');
-      for (int i = 0; i < 3; i++) {
-        Serial.print(lastHeadingReadings[i]);
-        Serial.print('\t');
-      }
-      Serial.println();
-    } else if (turnIndication > 0) {
-      Serial.print("RIGHT \t");
-      Serial.print(x); //gyro accel
-      Serial.print('\t');
-      for (int i = 0; i < 3; i++) {
-        Serial.print(lastHeadingReadings[i]);
-        Serial.print('\t');
-      }
-      Serial.println();
-    }
-    //Serial.print('\t');
-    //Serial.println(heading_int);
-    //Serial.print(roll);
-    //Serial.print('\t');
-    //Serial.println(pitch);
-  }
-  */
 }
