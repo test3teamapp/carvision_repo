@@ -291,6 +291,27 @@ More information: #138
 video-viewer --bitrate=1000000 csi://0 rtp://192.168.1.7:1234 
 
 
+// ---------- STARTING UP DETECT NET ON BOOT ----- ////////////
 
 
+command to trigger : /home/jimbo/jetson-inference/build/aarch64/bin/detectnet /dev/video1/ --input-flip=rotate-180
 
+Create the shell program /usr/local/bin/hello.sh and add the following content.
+ You want to ensure that the result is visible during startup and that you can 
+ easily find it when looking through the systemd journal.
+ 
+Make sure the file is executable and has user and group ownership by root with 700 permissions for security:
+
+chmod 700 ~/example.py
+
+#!/bin/bash
+# Simple program to use for testing startup configurations
+# with systemd.
+# By David Both
+# Licensed under GPL V2
+#
+echo "###############################"
+echo "######### Hello World! ########"
+echo "###############################"
+
+add the script to the startup programs of the "Default applications for LXSession"

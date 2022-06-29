@@ -367,7 +367,8 @@ void readDataFromArduino(int fd)
 		}
 		// else
 
-		printf("Sorry, Reading from serial stopped ...!");
+		printf("Sorry, Reading from serial stopped ... retrying in 1 minute!\n");
+		msleep(60000);
 	}
 }
 
