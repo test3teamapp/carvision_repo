@@ -1,31 +1,10 @@
 /*
-  Enabling BLE on MKR WiFi 1010
 
-  This sketch controls an LED on a MKR WiFi 1010 board
-  and makes a random reading of an analog pin.
-
-  The data recorded can be accessed through Bluetooth,
-  using an app such as LightBlue.
-
-  Based on the Arduino BLE library, Battery Monitor example.
-
-  (c) 2020 K. Söderby for Arduino
 */
 
-#include <ArduinoBLE.h>
 #include <CAN.h>
 #include <Wire.h>
 #include <MKRIMU.h>
-//#include "QuickMedianLib.h"
-
-BLEService carService("0000dd30-76d9-48e9-aa47-d0538d18f701");  // creating the service
-
-// No more that 4 services are shown on the android app we use.
-// So, combining the data in 2 services (string)
-// CAR_DATA_SLOWRATE_UUID / CAR_DATA_FASTRATE_UUID
-BLEStringCharacteristic CAR_DATA_SLOWRATE("0000dd31-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify, 50);  // creating the String combined data characteristic.Max string length 50
-BLEStringCharacteristic CAR_DATA_FASTRATE("0000dd32-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify, 50);
-
 
 long currentMillis = 0;
 long previousMillis = 0;
@@ -33,8 +12,6 @@ int canbus_speed = 0;
 int canbus_steeringangle = 0;
 int canbus_rpm = 0;
 int canbus_dataload[8];
-BLEDevice central;
-bool bleClientConnected = false;
 float gyro_x_accel = 0.0;
 float gyro_y_accel = 0.0;
 
@@ -62,13 +39,6 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);    //Set pin RELAY_PIN as an 'output' pin
   digitalWrite(RELAY_PIN, LOW);  // CIRCUIT IS OPEN on startup
 
-  // initialize BLE library
-  if (!BLE.begin()) {
-    Serial.println("starting BLE failed!");
-    while (1)
-      ;
-  }
-
   // start the CAN bus at 500 kbps
   if (!CAN.begin(500E3)) {
     Serial.println("Starting CAN failed!");
@@ -76,73 +46,26 @@ void setup() {
       ;
   }
 
-
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU!");
     while (1)
       ;
   }
 
-
-  BLE.setLocalName("MYSERVICE");  // Setting a name that will appear when scanning for bluetooth devices
-  BLE.setAdvertisedService(carService);
-
-  carService.addCharacteristic(CAR_DATA_SLOWRATE);  // add characteristics to a service
-  carService.addCharacteristic(CAR_DATA_FASTRATE);
-
-  BLE.addService(carService);  // adding the service
-
-  //CAR_DATA_SLOWRATE.writeValue("s0,r0,gx0.0,gy0.0");
-
-  BLE.advertise();  // start advertising the service
-  Serial.println("Bluetooth device active, waiting for connections...");
-  // previousMillis = millis();
-  bleClientConnected = false;
   isCarEngineRunning = false;
-
-  //time
-  Serial.println(seconds());
 }
 
 void loop() {
-/*
-  // dummy speed
-  int speed = (seconds() % 10) * 10;
-  // -----
-  // test
-  //  read accelaration data
-  delay(50);
-  acceleration();
-  if (central && central.connected()) {
-    CAR_DATA_FASTRATE.writeValue(String("s" + String(speed) + ",r" + String(canbus_rpm) + ",gx" + String(gyro_x_accel) + ",gy" + String(gyro_y_accel)));
-  }
 
-  if (speed != prevSpeed) {
-    prevSpeed = speed;
-    Serial.print("s");
-    Serial.println(speed);
-    if (central && central.connected()) {
-
-      CAR_DATA_SLOWRATE.writeValue(String("s" + String(speed) + ",r" + String(canbus_rpm) + ",gx" + String(gyro_x_accel) + ",gy" + String(gyro_y_accel)));
-    }
-  }
-  //currentMillis = millis();
-  // ------
-  */
-
-  // read accelaration data
-  acceleration();
-
-
-  if (!central) {
-    central = BLE.central();  // wait for a BLE central
-  }
   // do the main can-bus sniffing
   // try to parse packet
 
   int packetSize = CAN.parsePacket();
 
   if (packetSize) {
+
+    // read accelaration data
+    acceleration();
 
     // received a packet
     // Serial.print("Received ");
@@ -170,8 +93,7 @@ void loop() {
         Serial.print("s");
         Serial.print(canbus_speed);
         Serial.println();
-        
-        
+
         // check if the engine is stopped.
         if (seconds() - secondsOfLastRPMCanMsg > 5) {
           // we haven;t received RPMs for 5 seconds. Engine must have stopped.
@@ -180,11 +102,6 @@ void loop() {
           digitalWrite(RELAY_PIN, LOW);
           canbus_rpm = 0;
         }
-        
-        if (central && central.connected()) {
-          CAR_DATA_SLOWRATE.writeValue(String("s" + String(canbus_speed) + ",r" + String(canbus_rpm) + ",gx" + String(gyro_x_accel) + ",gy" + String(gyro_y_accel)));
-        }
-        
       }
     } else if (CAN.packetId() == 0x260) {
       // STEERING ANGLE e.g.  id      data length   data
@@ -203,10 +120,6 @@ void loop() {
         Serial.print("a");
         Serial.print(canbus_dataload[5]);
         Serial.println();
-        // newCanbusData = true;
-        if (central && central.connected()) {
-          // don't send anything
-        }
       }
 
     } else if (CAN.packetId() == 0x3B3) {
@@ -225,30 +138,19 @@ void loop() {
       Serial.print("r");
       Serial.print(canbus_rpm);
       Serial.println();
-      if (!isCarEngineRunning) {
-        if (canbus_rpm > 0) {
-          // close the relay circuit to power up jetson
-          isCarEngineRunning = true;
-          digitalWrite(RELAY_PIN, HIGH);
-        }
-      }
-      secondsOfLastRPMCanMsg = seconds();
-      if (central && central.connected()) {
-        // don't send anything
+      if (canbus_rpm > 0) {
+        // close the relay circuit to power up jetson
+        isCarEngineRunning = true;
+        digitalWrite(RELAY_PIN, HIGH);
+        secondsOfLastRPMCanMsg = seconds();
       }
     }
   }
 
-
-  if (central && central.connected()) {  // if a central is connected to the peripheral
-    // Serial.print("Connected to central: ");
-    // Serial.println(central.address());  // print the central's BT address
+  if (isCarEngineRunning) {
     digitalWrite(LED_BUILTIN, HIGH);  // turn on the LED to indicate the connection
-    //CAR_DATA_SLOWRATE.writeValue(String("s" + String(canbus_speed) + ",r" + String(canbus_rpm) + ",gx" + String(gyro_x_accel) + ",gy" + String(gyro_y_accel)));
   } else {
-    digitalWrite(LED_BUILTIN, LOW);  // when the central disconnects, turn off the LED
-    // Serial.print("Disconnected from central: ");
-    // Serial.println(central.address());
+    digitalWrite(LED_BUILTIN, LOW);  // else, turn off the LED
   }
 }
 

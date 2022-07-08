@@ -4,4 +4,4 @@
 echo "###############################"
 echo "#### Starting detectnet... ####"
 echo "###############################"
-/home/jimbo/jetson-inference/build/aarch64/bin/detectnet /dev/video1 --input-flip=rotate-180
+/home/jimbo/jetson-inference/build/aarch64/bin/detectnet csi://0 --input-flip=rotate-180
