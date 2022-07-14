@@ -286,9 +286,83 @@ It's already supported, you just need to specify the cpu option atmega328old in 
 
 More information: #138
 
+////////  MAKE USER PART OF DIALUP GROUP TO ACCESS SERIAL PORT to Arduino ///////////
+
+sudo usermod -a -G dialout <username>
+sudo usermod -a -G dialout jimbo
+
 
 /////////// rtsp //////
 video-viewer --bitrate=1000000 csi://0 rtp://192.168.1.7:1234 
+
+-------------- GPIO -------------
+
+follow instraction from https://github.com/pjueon/JetsonGPIO
+
+Installation
+1. Clone the repository.
+
+git clone https://github.com/pjueon/JetsonGPIO
+
+2. Make build directory and change directory to it.
+
+cd JetsonGPIO
+mkdir build && cd build
+
+3. Configure the cmake
+
+cmake .. [OPTIONS]
+
+Option 	Default value 	Description
+-DCMAKE_INSTALL_PREFIX= 	/usr/local 	Installation path
+-DBUILD_EXAMPLES= 	ON 	Build example codes in samples
+-DJETSON_GPIO_POST_INSTALL= 	ON 	Run the post-install script after installation to set user permissions. If you set this OFF, you must run your application as root to use Jetson GPIO.
+4. Build and Install the library
+
+sudo make install
+
+Linking the Library
+
+Note: To build your code with JetsonGPIO, C++11 or higher is required.
+Using CMake
+
+Add this to your CMakeLists.txtcd ~
+
+find_package(JetsonGPIO)
+
+assuming you added a target called mytarget, then you can link it with:
+
+target_link_libraries(mytarget JetsonGPIO::JetsonGPIO)
+
+
+----- openGJK ----------
+
+copy openGJK.cpp and openGJK.h at the c folder of jetson-inference/c/
+so that it becamoes part of the jetson library
+
+/////////////// replace code files //////////////
+cd ~/jetson-inference/c
+
+mv detectNet.cpp detectNet.cpp.orig
+mv detectNet.h detectNet.h.orig
+cp ~/carvision_repo/c++/openGJK.cpp .
+cp ~/carvision_repo/c++/openGJK.h . 
+cp ~/carvision_repo/c++/nvidia_DetectNet/detectNet.* .
+
+cd ~/jetson-inference/examples/detectnet/
+
+mv detectnet.cpp detectnet.cpp.orig
+cp ~/carvision_repo/c++/nvidia_examples/detectnet* .
+
+Now go to build directory and rebuild / install project
+
+cd ~/jetson-inference/build
+
+cmake ../
+make -j$(nproc)
+sudo make install
+sudo ldconfig
+
 
 
 // ---------- STARTING UP DETECT NET ON BOOT ----- ////////////
