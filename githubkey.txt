@@ -1,5 +1,9 @@
-github key
 
-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
+android studio key
+
+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
+expires monday 24 Oct 2022
 
 
+ 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
+ expires never
