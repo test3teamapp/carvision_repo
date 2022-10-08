@@ -1,31 +1,38 @@
 /*
-  Enabling BLE on MKR WiFi 1010
 
-  This sketch controls an LED on a MKR WiFi 1010 board
-  and makes a random reading of an analog pin.
+  WiFi UDP Send and Receive String
 
-  The data recorded can be accessed through Bluetooth,
-  using an app such as LightBlue.
+ This sketch wait an UDP packet on localPort using the WiFi module.
 
-  Based on the Arduino BLE library, Battery Monitor example.
+ When a packet is received an Acknowledge packet is sent to the client on port remotePort
 
-  (c) 2020 K. Söderby for Arduino
-*/
+ created 30 December 2012
 
-#include <ArduinoBLE.h>
+ by dlf (Metodo2 srl)
+
+ */
+
+#include <SPI.h>
+#include <WiFiNINA.h>
+#include <WiFiUdp.h>
 #include <CAN.h>
 #include <Wire.h>
 #include <MKRIMU.h>
-//#include "QuickMedianLib.h"
 
-BLEService carService("0000dd30-76d9-48e9-aa47-d0538d18f701");  // creating the service
 
-BLEUnsignedIntCharacteristic speedReading("0000dd31-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);    // creating the Speed Value characteristic
-BLEUnsignedIntCharacteristic pitchReading("0000dd32-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);    // creating the pitch angle Value characteristic
-BLEUnsignedIntCharacteristic rpmReading("0000dd33-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);      // creating the rpm Value characteristic
-BLEUnsignedIntCharacteristic headingReading("0000dd34-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);  // creating the heading angle Value characteristic
-BLEFloatCharacteristic gyroXReading("0000dd35-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);  // creating the heading angle Value characteristic
+nt status = WL_IDLE_STATUS;
+//#include "arduino_secrets.h"
+///////please enter your sensitive data in the Secret tab/arduino_secrets.h
+char ssid[] = //SECRET_SSID;        // your network SSID (name)
+char pass[] = //SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
+int keyIndex = 0;            // your network key Index number (needed only for WEP)
 
+unsigned int localPort = 2390;      // local port to listen on
+
+char packetBuffer[256]; //buffer to hold incoming packet
+char  ReplyBuffer[] = "acknowledged";       // a string to send back
+
+WiFiUDP Udp;
 
 long currentMillis = 0;
 long previousMillis = 0;
@@ -33,7 +40,6 @@ int canbus_speed = 0;
 int canbus_steeringangle = 0;
 int canbus_rpm = 0;
 int canbus_dataload[8];
-BLEDevice central;
 bool bleClientConnected = false;
 bool newCanbusData = false;
 int heading_int, pitch_int, roll_int;
@@ -46,10 +52,8 @@ int lastHeadingReadings[3];
 // dummy speed;
 int prevSpeed = 0;
 
-//DFRobot_LIS2DH12 LIS; // Accelerometer
-
 void setup() {
-  Wire.begin();          // i2c dfrobot accelerometer id =  0x018
+
   Serial.begin(9600);//115200);  // initialize serial communication
   // while (!Serial);       //starts the program if we open the serial monitor.
 
@@ -274,19 +278,16 @@ void acceleration(void) {
 
   }
 */
-  float x, y, z;
+  float gyro_x_accel, y, z;
   if (IMU.gyroscopeAvailable()) {
     IMU.readGyroscope(x, y, z);
-    gyro_x_accel = x;
-    
-    if (x > 1.0 || x < -1) { // send to jetson. only above a threshold
+    if (gyro_x_accel > 1.0 || gyro_x_accel < -1) { // send to jetson. only above a threshold
       if (x > 0) {
         Serial.print("L");
       } else {
         Serial.print("R");
       }
-      
-      Serial.println(x);
+      Serial.println(gyro_x_accel);
       //Serial.println('\t');      
     } 
     //Serial.print(y);

@@ -38,6 +38,12 @@ sudo systemctl start gdm3.service
 - video devices list -
 v4l2-ctl --list-devices
 
+--- restart gstrnvargus-daemon service
+Or you may try to restart nvargus-daemon along with gst-launch-1.0 command like:
+
+$ sudo service nvargus-daemon stop
+$ sudo service nvargus-daemon start
+
 
 - remote desktop issues - 
 
