@@ -1,0 +1,15 @@
+[Unit]
+Description=systemd streaming images and object detection service
+After=weston.target
+
+[Service]
+PAMName=login
+Type=simple
+User=mendel
+WorkingDirectory=/home/mendel
+Environment=DISPLAY=:0
+ExecStart=/bin/bash /usr/bin/StreamCamSender_service.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=systemd connecting to arduino ble for car data and object detection service
+After=weston.target
+
+[Service]
+PAMName=login
+Type=simple
+User=mendel
+WorkingDirectory=/home/mendel
+Environment=DISPLAY=:0
+ExecStartPre=-/sbin/modprobe uvcvideo
+ExecStart=/bin/bash /usr/bin/ArduinoBLEAndObjDetect_service.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
