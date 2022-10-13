@@ -44,6 +44,7 @@ import gstreamer
 import os
 import time
 from datetime import datetime
+import math
 
 from common import avg_fps_counter, SVG
 from pycoral.adapters.common import input_size
@@ -76,15 +77,146 @@ cardataG_X = Value('d', 0.0)
 detectionProcessStarted = Value('B',0)
 detectProcess = Process()
 detectThread = threading.Thread()
+p1 = p2 = p3 = p4 = [0,0] #collision box points
+widthImage = 640
+heightImage = 480
+inference_size = (widthImage, heightImage)
+default_model_dir = '/home/mendel/coral/examples-camera/all_models'
+default_model = 'mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite'
+default_labels = 'coco_labels.txt'
+top_k = 10
+threshold = 0.3
+
 _DEBUG = True
+_IS_HEADLESS = False
 
-def detectCollision(objs, cardataSpeed, cardataRPM, cardataG_X):
-    print(objs)
-    print(f"speed = {cardataSpeed.Value}, RPM = {cardataRPM.Value},G_x = {cardataG_X.Value}")
-
-
-def generate_svg(src_size, inference_box, objs, labels, text_lines):
+def detectCollision(objs):
     #print(objs)
+    #print(f"speed = {cardataSpeed.value}, RPM = {cardataRPM.value},G_x = {cardataG_X.value}")
+    global widthImage, heightImage, inference_size
+    global p1, p2, p3, p4
+
+    def ccw(A,B,C):
+        return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+
+    # Return true if line segments AB and CD intersect
+    def intersect(A,B,C,D):
+        return ccw(A,C,D) != ccw(B,C,D) and ccw(A,B,C) != ccw(A,B,D)
+
+
+    #print(f"checking point {point[0]},{point[1]}")
+    # from the point we check, we draw a line to the most right part of the screen
+    # if this line intersect with the right line of the collision box
+    # it COULD be within the collision box
+    # IF so, we draw a second line to the most left part of the screen
+    # and IF that line intersect with the left line of the collision box too
+    # THEN the point is within the boundary of the collision box
+  
+    scale_x, scale_y = widthImage / inference_size[0], heightImage / inference_size[1]
+    for obj in objs:
+        bbox = obj.bbox.scale(scale_x, scale_y)
+        x0, y0 = int(bbox.xmin), int(bbox.ymin)
+        x1, y1 = int(bbox.xmax), int(bbox.ymax)
+
+        point = [0,0]
+        point[0] = int((x1 - x0) / 2) + x0
+        point[1] = y1
+
+        #1 check to the right
+        intersectsToTheRight = intersect((point[0],point[1]),(widthImage,point[1]),(p3[0],p3[1]),(p4[0],p4[1]))
+
+        if (intersectsToTheRight):
+            #2 check to the left
+            intersectsToTheLeft = intersect((point[0],point[1]),(0,point[1]),(p1[0],p1[1]),(p2[0],p2[1]))
+
+            if (intersectsToTheLeft):
+                print(f"collision with point {point[0]},{point[1]}")
+
+
+def updateCollisionBoxByTheta():
+    global cardataG_X
+    global p1, p2, p3, p4
+
+    #### avoid division by 0, and normalise values withn -0.8 and 0.8 
+    if (cardataG_X.value == 0.0):
+      cardataG_X.value = 0.001
+    elif (cardataG_X.value > 16.0):
+      cardataG_X.value = 16.0
+    elif (cardataG_X.value < -16.0):
+      cardataG_X.value = -16.0
+
+    gx = cardataG_X.value / 20  
+
+    newP2 = [0,0]
+    newP4 = [0,0]
+    #new X of top point for left line of collision area
+    newP2[0] = int(math.cos(gx) * (p2[0] - p1[0]) - (math.sin(gx) * (p2[1] - p1[1])) + p1[0])
+    #new Y of top point for left line of collision area
+    newP2[1] = int(math.sin(gx) * (p2[0] - p1[0]) + (math.cos(gx) * (p2[1] - p1[1])) + p1[1])
+    p2 = newP2
+    #new X of top point for left line of collision area
+    newP4[0] = int(math.cos(gx) * (p4[0] - p3[0]) - (math.sin(gx) * (p4[1] - p3[1])) + p3[0])
+    #new Y of top point for left line of collision area
+    newP4[1] = int(math.sin(gx) * (p4[0] - p3[0]) + (math.cos(gx) * (p4[1] - p3[1])) + p3[1])
+    p4 = newP4
+
+
+def updateCollisionBox():
+    global cardataG_X
+    global cardataSpeed
+    global p1, p2, p3, p4
+    global widthImage
+    global heightImage
+
+    #print(f"updateCollisionBox with xG = {cardataG_X.value}, speed = {currentSpeed.value}")
+    
+
+    ### Trial and error. Scaling 0-100 kmh to 0 to Height of image
+    if (cardataSpeed.value > 100):
+      cardataSpeed.value = 100
+
+    speed = cardataSpeed.value * 5 
+    #first calculate the length / height of the coalision area, using 0.1 as the default value for Gx accelaration
+    gx = 0.001
+
+  
+    ### p1 - lower Left of collision box
+    ### p2 - upper Left
+    ### p3 - lower Right
+    ### p4 - upper Right
+
+    # we have to take under consideration that
+    # the points are in the upside down coordinates system of the 
+    # image processed, 
+    # where 0.0 is 0,imageHeight and imageWidth,imageHeight is imageWidth,0
+
+    p1 = (int(widthImage/4), heightImage)
+    movementOfGuidelinesOnXAxis =  int( (speed / gx) - 
+                    ((speed / gx) * math.cos(gx)) +
+                    (speed * 0.2))
+    movementOfGuidelinesOnYAxis = int(((speed / gx) * math.sin(gx)) - (abs(gx)* heightImage/4))
+    
+    p2 = (p1[0] + movementOfGuidelinesOnXAxis,           
+          p1[1] - movementOfGuidelinesOnYAxis)
+              
+    p3 = (int(widthImage/4) * 3, heightImage)
+    p4 = (p3[0] - movementOfGuidelinesOnXAxis , p2[1]) # - (2 * (speed * 0.2))
+
+    # now rotate the lines according to currentXG reading, if there is a significant value 
+    if (cardataG_X.value > 0.01 or cardataG_X.value < -0.01):
+      updateCollisionBoxByTheta()    
+
+    #print(f"speed = {speed}, gx = {cardataG_X.value}")
+    #print (f"p1={p1} p2={p2} p3={p3} p4={p4}")
+
+
+
+# we should display the collision box as well
+# Call updateCollisionBox() before calling this
+def generate_svg(src_size, inference_box, objs, labels, text_lines):
+    global p1, p2, p3, p4
+    #print(objs)
+    #print (f"p1={p1} p2={p2} p3={p3} p4={p4}")
     svg = SVG(src_size)
     src_w, src_h = src_size
     box_x, box_y, box_w, box_h = inference_box
@@ -107,9 +239,16 @@ def generate_svg(src_size, inference_box, objs, labels, text_lines):
         label = '{}% {}'.format(percent, labels.get(obj.id, obj.id))
         svg.add_text(x, y - 5, label, 20)
         svg.add_rect(x, y, w, h, 'red', 2)
+
+    # display collision box
+    svg.add_line(p1[0], p1[1], p2[0], p2[1])
+    svg.add_line(p3[0], p3[1], p4[0], p4[1])
+    
     return svg.finish()
 
 def append_objs_to_img(cv2_im, inference_size, objs, labels):
+    global p1, p2, p3, p4
+
     height, width, channels = cv2_im.shape
     scale_x, scale_y = width / inference_size[0], height / inference_size[1]
     for obj in objs:
@@ -123,74 +262,88 @@ def append_objs_to_img(cv2_im, inference_size, objs, labels):
         cv2_im = cv2.rectangle(cv2_im, (x0, y0), (x1, y1), (0, 255, 0), 2)
         cv2_im = cv2.putText(cv2_im, label, (x0, y0+30),
                              cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2)
+    
+    # display collision box
+    cv2.line(cv2_im, (p1[0], p1[1]), (p2[0], p2[1]), (0, 255, 0), 2)
+    cv2.line(cv2_im, (p3[0], p3[1]), (p4[0], p4[1]), (0, 255, 0), 2)
+
     return cv2_im
 
 def detectObjects_cv2():
-    global cardataSpeed, cardataRPM, cardataG_X, detectionProcessStarted
-    isHeadless = True
-    default_model_dir = '/home/mendel/coral/examples-camera/all_models'
-    default_model = 'mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite'
-    default_labels = 'coco_labels.txt'
-    top_k = 8
-    threshold = 0.3
+    global detectionProcessStarted, default_model_dir , default_model 
+    global default_labels, top_k, threshold, _IS_HEADLESS,_DEBUG
+    global detectProcess, inference_size
 
-    print('Loading {} with {} labels.'.format(default_model , default_labels))
-    interpreter = make_interpreter(os.path.join(default_model_dir,default_model))
-    interpreter.allocate_tensors()
-    labels = read_label_file(os.path.join(default_model_dir, default_labels))
-    inference_size = input_size(interpreter)
+    try:
+        print('Loading {} with {} labels.'.format(default_model , default_labels))
+        interpreter = make_interpreter(os.path.join(default_model_dir,default_model))
+        interpreter.allocate_tensors()
+        labels = read_label_file(os.path.join(default_model_dir, default_labels))
+        inference_size = input_size(interpreter)
 
-    cap = cv2.VideoCapture(1)
+        cap = cv2.VideoCapture(1)
     
-    start = time.time()
-    numOfFrames = 0
+        start = time.time()
+        numOfFrames = 0
 
-    while (cap.isOpened() and (detectionProcessStarted.value == 1)):
-        ret, frame = cap.read()
-        if not ret:
-            break
+        while (cap.isOpened() and (detectionProcessStarted.value == 1)):
+            ret, frame = cap.read()
+            if not ret:
+                break
         
-        if (_DEBUG):
-            numOfFrames += 1
-            if (numOfFrames == 100):
-                now = datetime.now()
-                current_time = now.strftime("%H:%M:%S")
-                fps = 100 / (time.time() - start)
-                print(f"fps={fps} / time = {current_time}")
-                start = time.time()
-                numOfFrames = 0
+            if (_DEBUG):
+                numOfFrames += 1
+                if (numOfFrames == 100):
+                    now = datetime.now()
+                    current_time = now.strftime("%H:%M:%S")
+                    fps = 100 / (time.time() - start)
+                    print(f"fps={fps} / time = {current_time}")
+                    start = time.time()
+                    numOfFrames = 0
 
-        cv2_im = frame
+            cv2_im = frame
 
-        cv2_im_rgb = cv2.cvtColor(cv2_im, cv2.COLOR_BGR2RGB)
-        cv2_im_rgb = cv2.resize(cv2_im_rgb, inference_size)
-        run_inference(interpreter, cv2_im_rgb.tobytes())
-        objs = get_objects(interpreter, threshold)[:top_k]
+            cv2_im_rgb = cv2.cvtColor(cv2_im, cv2.COLOR_BGR2RGB)
+            cv2_im_rgb = cv2.resize(cv2_im_rgb, inference_size)
+            run_inference(interpreter, cv2_im_rgb.tobytes())
+            objs = get_objects(interpreter, threshold)[:top_k]
+
+            updateCollisionBox()
+            detectCollision(objs)
+
+            #if (_DEBUG):
+                #cv2_im = append_objs_to_img(cv2_im, inference_size, objs, labels)
+                #if (isHeadless):
+                    #cv2.imwrite("detection_output.jpg", cv2_im)
+                #else:            
+                    #cv2.imshow('frame', cv2_im)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        cap.release()
+        cv2.destroyAllWindows()
+        print("IF WE REACH THIS POINT --- pipeline interupted. Detection Process ended")
+        detectionProcessStarted.value = 0
+    except:
+        # kill the process.
+        # a new RPM > 0 value from the car will triger it again        
+        print("Terminating object detection process due to exception")
+        detectProcess.terminate()        
+        detectionProcessStarted.value = 0
 
 
-        #if (_DEBUG):
-            #cv2_im = append_objs_to_img(cv2_im, inference_size, objs, labels)
-            #if (isHeadless):
-            #    cv2.imwrite("detection_output.jpg", cv2_im)
-            #else:            
-            #    cv2.imshow('frame', cv2_im)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-    print("IF WE REACH THIS POINT --- pipeline interupted. Detection Process ended")
-    detectionProcessStarted.value = 0
+# use only for testing visually the results
+# does not work well when put on a new spawned process
+# works with thread. but thread is more difficult to terminate.
+# more over it, it uses more cpu power - more heat
+# for production, use cv2 alternative (cv2 can not display on monitor, 
+# due to some funny opencv / qt pluggin not playing nice on coral)
 
 def detectObjects():
-    global cardataSpeed, cardataRPM, cardataG_X, detectionProcessStarted
-    isHeadless = True
-    default_model_dir = '/home/mendel/coral/examples-camera/all_models'
-    default_model = 'mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite'
-    default_labels = 'coco_labels.txt'
-    top_k = 10
-    threshold = 0.3
+    global widthImage, heightImage, inference_size
+    global detectionProcessStarted, default_model_dir , default_model 
+    global default_labels, top_k, threshold, _IS_HEADLESS,_DEBUG, detectProcess
 
     print('Loading {} with {} labels.'.format(default_model , default_labels))
     interpreter = make_interpreter(os.path.join(default_model_dir,default_model))
@@ -204,9 +357,11 @@ def detectObjects():
     def user_callback(input_tensor, src_size, inference_box):
         nonlocal fps_counter
         global detectionProcessStarted
+        global _IS_HEADLESS
 
         if (detectionProcessStarted.value == 0):
-            os.system('sudo reboot')
+            #os.system('sudo reboot')
+            detectProcess.terminate()
             return 
         
         start_time = time.monotonic()
@@ -214,53 +369,63 @@ def detectObjects():
         # For larger input image sizes, use the edgetpu.classification.engine for better performance
         objs = get_objects(interpreter, threshold)[:top_k]
         end_time = time.monotonic()
-        text_lines = [
-          'Inference: {:.2f} ms'.format((end_time - start_time) * 1000),
-          'FPS: {} fps'.format(round(next(fps_counter))),
-        ]
+        if (_DEBUG):
+            text_lines = [
+            'Inference: {:.2f} ms'.format((end_time - start_time) * 1000),
+            'FPS: {} fps'.format(round(next(fps_counter))),
+            ]
         #print(' '.join(text_lines))
 
-        if (isHeadless):
+        if (_IS_HEADLESS):
+            updateCollisionBox()
+            detectCollision(objs)
             return #SVG(src_size)
         else:
+            updateCollisionBox()
+            detectCollision(objs)
             return generate_svg(src_size, inference_box, objs, labels, text_lines)    
     
     result = gstreamer.run_pipeline(user_callback,
-                                    src_size=(640, 480),
+                                    src_size=(widthImage, heightImage),
                                     #src_size=(1280,720),
                                     appsink_size=inference_size,
                                     videosrc='/dev/video0',
                                     videofmt='raw',
-                                    headless=isHeadless)
+                                    headless=_IS_HEADLESS)
     print("IF WE REACH THIS POINT --- pipeline interupted. Detection Process ended")
     detectionProcessStarted.value = 0
 
 
-
 def speed_notification_handler(characteristic: BleakGATTCharacteristic, data: bytearray):
-    s = int.from_bytes(data, "little")
-    print(f"Speed: {s}")
+    global cardataSpeed
+    s = int.from_bytes(data, "little")    
+    #print(f"Speed: {s}")
+    cardataSpeed.value = s
 
 def rpm_notification_handler(characteristic: BleakGATTCharacteristic, data: bytearray):
-    global detectProcess, detectThread
+    global detectProcess, detectThread, cardataRPM
     rpm = int.from_bytes(data, "little")
-    print(f"RPM: {rpm}")
+    #print(f"RPM: {rpm}")
+    cardataRPM.value = rpm
     if (detectionProcessStarted.value == 0):
         detectProcess = Process(target=detectObjects_cv2, args=())
         detectProcess.start()
+        # gstreamer based method does not play weel with processes. using thread
         #detectThread = threading.Thread(target=detectObjects, args=())        
         #detectThread.start()
         detectionProcessStarted.value = 1   
 
 def gx_notification_handler(characteristic: BleakGATTCharacteristic, data: bytearray):
+    global cardataG_X
     arr = array.array('f')
     arr.frombytes(data)
     #print(arr)
-    print(f"Gx: {arr[0]}")
+    #print(f"Gx: {arr[0]}")
+    # we need to reverse sign. 
+    cardataG_X.value = -1 * arr[0]
 
 def disconnected_callback(client):
     global disconnected_event
-    global cardataSpeed, cardataRPM, cardataG_X
     global detectionProcessStarted, detectProcess, detectThread
 
     print("Disconnected callback called!")
@@ -316,13 +481,10 @@ async def connectToCarBLE():
 
         
 
-def main():
-    global cardataSpeed, cardataRPM, cardataG_X
-    
+def main():    
     asyncio.run(
         connectToCarBLE()
-    )
-    #detectObjects(cardataSpeed, cardataRPM, cardataG0_X)
+    )    
 
 if __name__ == '__main__':
     main()
