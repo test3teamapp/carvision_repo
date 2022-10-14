@@ -41,6 +41,7 @@ Successfully installed async-timeout-4.0.2 bleak-0.18.1 dbus-fast-1.29.1 typing-
 """
 import argparse
 import gstreamer
+import cv2
 import os
 import time
 from datetime import datetime
@@ -67,7 +68,7 @@ from bleak.backends.characteristic import BleakGATTCharacteristic
 
 import array  # for conversion of byte array to float
 
-import cv2
+import simpleaudio as sa
 
 
 disconnected_event = False
@@ -86,6 +87,10 @@ default_model = 'mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite'
 default_labels = 'coco_labels.txt'
 top_k = 10
 threshold = 0.3
+# PRELOAD the beeb sound for collition detection
+beeb_wave_obj = sa.WaveObject.from_wave_file("/home/mendel/sounds/beep1.wav")
+# play a sound so that the play object is initialised and can be used latter on 
+play_sound_obj : sa.PlayObject
 
 _DEBUG = True
 _IS_HEADLESS = False
@@ -95,6 +100,7 @@ def detectCollision(objs):
     #print(f"speed = {cardataSpeed.value}, RPM = {cardataRPM.value},G_x = {cardataG_X.value}")
     global widthImage, heightImage, inference_size
     global p1, p2, p3, p4
+    global beeb_wave_obj, play_sound_obj
 
     def ccw(A,B,C):
         return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
@@ -131,6 +137,8 @@ def detectCollision(objs):
 
             if (intersectsToTheLeft):
                 print(f"collision with point {point[0]},{point[1]}")
+                if (not play_sound_obj.is_playing()):
+                    play_sound_obj = beeb_wave_obj.play()
 
 
 def updateCollisionBoxByTheta():
@@ -273,6 +281,9 @@ def detectObjects_cv2():
     global detectionProcessStarted, default_model_dir , default_model 
     global default_labels, top_k, threshold, _IS_HEADLESS,_DEBUG
     global detectProcess, inference_size
+    global play_sound_obj, beeb_wave_obj
+    # play a sound so that the play object is initialised and can be used latter on
+    play_sound_obj = sa.WaveObject.from_wave_file("/home/mendel/sounds/button-8.wav").play()
 
     try:
         print('Loading {} with {} labels.'.format(default_model , default_labels))
@@ -344,6 +355,9 @@ def detectObjects():
     global widthImage, heightImage, inference_size
     global detectionProcessStarted, default_model_dir , default_model 
     global default_labels, top_k, threshold, _IS_HEADLESS,_DEBUG, detectProcess
+    global play_sound_obj, beeb_wave_obj
+
+    play_sound_obj = beeb_wave_obj.play()
 
     print('Loading {} with {} labels.'.format(default_model , default_labels))
     interpreter = make_interpreter(os.path.join(default_model_dir,default_model))
@@ -407,13 +421,15 @@ def rpm_notification_handler(characteristic: BleakGATTCharacteristic, data: byte
     rpm = int.from_bytes(data, "little")
     #print(f"RPM: {rpm}")
     cardataRPM.value = rpm
-    if (detectionProcessStarted.value == 0):
-        detectProcess = Process(target=detectObjects_cv2, args=())
-        detectProcess.start()
-        # gstreamer based method does not play weel with processes. using thread
-        #detectThread = threading.Thread(target=detectObjects, args=())        
-        #detectThread.start()
-        detectionProcessStarted.value = 1   
+    if (rpm > 0):
+        
+        if (detectionProcessStarted.value == 0):
+            detectProcess = Process(target=detectObjects_cv2, args=())
+            detectProcess.start()
+            # gstreamer based method does not play weel with processes. using thread
+            #detectThread = threading.Thread(target=detectObjects, args=())        
+            #detectThread.start()
+            detectionProcessStarted.value = 1   
 
 def gx_notification_handler(characteristic: BleakGATTCharacteristic, data: bytearray):
     global cardataG_X
@@ -448,9 +464,9 @@ async def connectToCarBLE():
     rpm_char_uuid = "0000dd32-76d9-48e9-aa47-d0538d18f701"
     gx_char_uuid = "0000dd33-76d9-48e9-aa47-d0538d18f701"
 
-    #devices = await BleakScanner.discover()
-    #for d in devices:
-    #    print(d)
+    devices = await BleakScanner.discover()
+    for d in devices:
+        print(d)
     bleClient = BleakClient(address, disconnected_callback=disconnected_callback)
 
     while(not isClientConnected):
