@@ -68,10 +68,10 @@ void loop() {
     acceleration();
 
     // received a packet
-    // Serial.print("Received ");
-    // if (CAN.packetExtended()) {
-    //   Serial.print("extended ");
-    // }
+    Serial.print("Received ");
+    if (CAN.packetExtended()) {
+       Serial.print("extended ");
+    }
     if (CAN.packetRtr()) {
       // Remote transmission request, packet contains no data
       //   Serial.print("RTR ");

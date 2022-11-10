@@ -1,68 +1,72 @@
 /*
+  Enabling BLE on MKR WiFi 1010
 
-  WiFi UDP Send and Receive String
+  This sketch controls an LED on a MKR WiFi 1010 board
+  and makes a random reading of an analog pin.
 
- This sketch wait an UDP packet on localPort using the WiFi module.
+  The data recorded can be accessed through Bluetooth,
+  using an app such as LightBlue.
 
- When a packet is received an Acknowledge packet is sent to the client on port remotePort
+  Based on the Arduino BLE library, Battery Monitor example.
 
- created 30 December 2012
+  (c) 2020 K. Söderby for Arduino
+*/
 
- by dlf (Metodo2 srl)
+/// ------------------------ WE CAN NOT USE BOTH BLE AND WIFI AT THE SAME TIME ---------- WITH MKR1010
 
- */
+/*
+   Messages from arduino must be Strings, ending with newline,
+   and starting with the following prefixes (adding after it ":")
+   e.g. speed:20
+        rpm:4000
+        gx:-2.5
+        cs:Car engine is OFF
+
+  public enum OutputType {
+    SPEED("s"),  //calls constructor with value s
+    HEADING_ANGLE("h"),  //calls constructor with value a
+    RPM("r"),
+    PITCH_ANGLE("p"),
+    GYRO_X_ANGLE("gx"),
+    GYRO_Y_ANGLE("gy)"),
+    MSG("msg"),   //calls constructor with value m
+    CARSTATUS("cs")
+*/
+
 
 #include <SPI.h>
-#include <WiFiNINA.h>
-#include <WiFiUdp.h>
 #include <CAN.h>
-#include <Wire.h>
 #include <MKRIMU.h>
+#include <WiFiNINA.h>   // use this for MKR1010 or Nano 33 IoT
+//#include <WiFi101.h>  // use this for MKR1000
+#include <WiFiUdp.h>
 
+// put your network SSID and password in
+// a tab called arduino_secrets.h:
+#include "arduino_secrets.h"
 
-nt status = WL_IDLE_STATUS;
-//#include "arduino_secrets.h"
-///////please enter your sensitive data in the Secret tab/arduino_secrets.h
-char ssid[] = //SECRET_SSID;        // your network SSID (name)
-char pass[] = //SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
-int keyIndex = 0;            // your network key Index number (needed only for WEP)
+WiFiUDP Udp;           // instance of UDP library
+// the address and port of the server
+IPAddress broadcastAddress; // broadcast
+const int port = 20001; // port on which this client sends and receives
 
-unsigned int localPort = 2390;      // local port to listen on
-
-char packetBuffer[256]; //buffer to hold incoming packet
-char  ReplyBuffer[] = "acknowledged";       // a string to send back
-
-WiFiUDP Udp;
-
-long currentMillis = 0;
-long previousMillis = 0;
+long lastTimeRPMReceivedInSeconds = 0;
 int canbus_speed = 0;
-int canbus_steeringangle = 0;
 int canbus_rpm = 0;
-int canbus_dataload[8];
-bool bleClientConnected = false;
-bool newCanbusData = false;
-int heading_int, pitch_int, roll_int;
 float gyro_x_accel = 0.0;
-int lastPitchReadings[3];  // using them in fifo mode to identify the trend
-int lastHeadingReadings[3];
+int canbus_dataload[8];
+int canbusINTERRUPT_PIN = 7; // check mkr canbus shield documentation
+bool newCanbusData = false; // new relevant data received (speed and RPM)
+bool canbusIsReceiving = false; // can bus shield is receiving from the can bus (all data)- triggered with interrupt
+
 
 //timekeepeing
 #define seconds() (millis() / 1000)
-// dummy speed;
-int prevSpeed = 0;
 
 void setup() {
-
-  Serial.begin(9600);//115200);  // initialize serial communication
+  Serial.begin(115200);//115200);  // initialize serial communication
   // while (!Serial);       //starts the program if we open the serial monitor.
 
-  // initialize BLE library
-  if (!BLE.begin()) {
-    Serial.println("starting BLE failed!");
-    while (1)
-      ;
-  }
 
   // start the CAN bus at 500 kbps
   if (!CAN.begin(500E3)) {
@@ -71,85 +75,170 @@ void setup() {
       ;
   }
 
-
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU!");
     while (1)
       ;
   }
 
-  /*
-  Serial.print("Accelerometer sample rate = ");
-  Serial.print(IMU.accelerationSampleRate());
-  Serial.println(" Hz");
-  Serial.print("Acceleration in G's ");
-  Serial.println("X\tY\tZ");
-  Serial.print("Gyroscope sample rate = ");
-  Serial.print(IMU.gyroscopeSampleRate());
-  Serial.println(" Hz");
-  Serial.print("Gyroscope in degrees/second ");
-  Serial.println("X\tY\tZ");
-  Serial.print("Euler Angles sample rate = ");
-  Serial.print(IMU.eulerAnglesSampleRate());
-  Serial.println(" Hz");
-  Serial.print("Euler Angles in degrees ");
-  Serial.println("Heading\tRoll\tPitch");
-*/
-  // feeding the movement trending arrays;
+  pinMode(canbusINTERRUPT_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(canbusINTERRUPT_PIN), CanBusInterruptFunction, CHANGE);
 
-  for (int i = 0; i < 3; i++) {
-    acceleration();
-    lastPitchReadings[i] = pitch_int;
-    lastHeadingReadings[i] = heading_int;
-  }
-
-  BLE.setLocalName("MYSERVICE");  // Setting a name that will appear when scanning for bluetooth devices
-  BLE.setAdvertisedService(carService);
-
-  carService.addCharacteristic(speedReading);  // add characteristics to a service
-  carService.addCharacteristic(pitchReading);
-  carService.addCharacteristic(headingReading);
-  carService.addCharacteristic(rpmReading);
-  carService.addCharacteristic(gyroXReading);
-
-  BLE.addService(carService);  // adding the service
-
-  speedReading.writeValue(0);  // set initial value for characteristics
-  pitchReading.writeValue(0);
-  headingReading.writeValue(0);
-  rpmReading.writeValue(0);
-  gyroXReading.writeValue(0.0);
-
-  BLE.advertise();  // start advertising the service
-  Serial.println("Bluetooth device active, waiting for connections...");
-  // previousMillis = millis();
-  bleClientConnected = false;
-  newCanbusData = false;
-
+  connectToNetwork(); // connect to wifi if available
   //time
-  Serial.println(seconds());
+  //Serial.println(seconds());
 }
 
 void loop() {
 
-  // dummy speed
-  // -----
-  int speed = (seconds() % 10) * 10;
-  if (speed != prevSpeed) {
-    prevSpeed = speed;
-    Serial.print("s");
-    Serial.println(speed);
+  if (WiFi.status() != WL_CONNECTED) {
+    connectToNetwork();
   }
-  //currentMillis = millis();
-  // ------
 
-  if (!central) {
-    // wait for the first 10 seconds to connect to ble
-    // if (currentMillis - previousMillis < 10000){
-    central = BLE.central();  // wait for a BLE central
+  CanBusReceive();
 
-    // }
+  //  // test
+//    delay(1000);
+//    if (canbus_speed < 2000) {
+//      canbus_speed = canbus_speed + 10;
+//      canbus_rpm = canbus_rpm + 10;
+//      Serial.println("Sending data " + String(canbus_speed));
+//      sendUDPData();
+//      sendUDPData(String("cs:Engine is ON"));
+//    } else {
+//      delay(15000);
+//      canbus_speed = 0;
+//      canbus_rpm = 0;
+//      sendUDPData();
+//      sendUDPData(String("cs:Engine is OFF"));
+//      delay(10000);
+//    }
+
+  if (newCanbusData) {
+    sendUDPData();
   }
+
+  if (WiFi.status() == WL_CONNECTED) {  // if a central is connected to the peripheral
+    //Serial.print("Connected to central: ");
+    // Serial.println(central.address());  // print the central's BT address
+    digitalWrite(LED_BUILTIN, HIGH);  // turn on the LED to indicate the connection
+  } else {
+    digitalWrite(LED_BUILTIN, LOW);  // when the central disconnects, turn off the LED
+    //Serial.print("Disconnected from central: ");
+    // Serial.println(central.address());
+  }
+
+
+  if (seconds() - lastTimeRPMReceivedInSeconds > 10) {
+    // THE ENGINE HAS STOPPED for almost 10 seconds
+    if (canbusIsReceiving) { // if we were receiving data until this point
+      canbus_speed = 0;
+      canbus_rpm = 0;
+      sendUDPData(); // sent the last values. especially RPM 0
+      sendUDPData(String("cs:Engine is OFF"));
+    }
+    canbusIsReceiving = false;
+    newCanbusData = false;
+  }
+}
+
+void connectToNetwork() {
+  // try to connect to the network:
+
+  while ( WiFi.status() != WL_CONNECTED) {
+    for (byte networkCounter = 0; networkCounter < sizeof(SSIDs) / sizeof(SSIDs[0]); networkCounter++) {
+      digitalWrite(LED_BUILTIN, LOW);
+      Serial.print("Attempting to connect to Network named: ");
+      Serial.println(SSIDs[networkCounter]);       // print the network name (SSID);
+      // Connect to WPA/WPA2 network:
+      if (WiFi.begin(SSIDs[networkCounter], WiFiPasswords[networkCounter]) == WL_CONNECTED) {
+        break;  //connected to network
+      }
+    }
+  }
+  digitalWrite(LED_BUILTIN, HIGH);
+  // print the SSID of the network you're attached to:
+  if (Serial) Serial.print("Connected to: ");
+  if (Serial) Serial.println(WiFi.SSID());
+
+  // print your WiFi shield's IP address:
+  IPAddress ip = WiFi.localIP();
+  if (Serial) Serial.print("IP Address: ");
+  if (Serial) Serial.println(ip);
+  // get broadcast ip
+  broadcastAddress = getBroadcastIP();
+  if (Serial) Serial.println(broadcastAddress);
+  Udp.begin(port);
+  sendUDPData(String("cs:Connected with ip " + String(ip)));
+}
+
+IPAddress getBroadcastIP() {
+    IPAddress broadcastIp = WiFi.localIP();
+    broadcastIp[3] = 255;    
+    return broadcastIp;
+}
+
+void splitString(String str, String stringToSplitWith){
+  Serial.println(str);
+  String strs[4];
+  int StringCount = 0;
+   // Split the string into substrings
+  while (str.length() > 0)
+  {
+    int index = str.indexOf(stringToSplitWith);
+    if (index == -1) // No space found
+    {
+      strs[StringCount++] = str;
+      break;
+    }
+    else
+    {
+      strs[StringCount++] = str.substring(0, index);
+      str = str.substring(index+1);
+    }
+  }
+
+  // Show the resulting substrings
+  for (int i = 0; i < StringCount; i++)
+  {
+    Serial.print(i);
+    Serial.print(": \"");
+    Serial.print(strs[i]);
+    Serial.println("\"");
+  }
+}
+
+void CanBusInterruptFunction() {
+  int val = 0;
+  val = digitalRead(canbusINTERRUPT_PIN);
+  sendUDPData(String("cs:CanBus pin value = " + String(val)));
+
+}
+
+void sendUDPData(String str) {
+  // start a new packet:
+  Udp.beginPacket(broadcastAddress, port);
+  Udp.println(str);    // add payload to it
+  Udp.endPacket();     // finish and send packet
+}
+
+void sendUDPData(void) {
+  String dataStr = String("speed:" + String(canbus_speed));
+  sendUDPData(dataStr);
+
+  dataStr = String("rpm:" + String(canbus_rpm));
+  sendUDPData(dataStr);
+
+  if (canbus_speed > 0) {
+    // read accelaration data
+    acceleration();
+    dataStr = String("gx:" + String(gyro_x_accel));
+    sendUDPData(dataStr);
+  }
+}
+
+void CanBusReceive(void) {
+
   // do the main can-bus sniffing
   // try to parse packet
 
@@ -157,12 +246,17 @@ void loop() {
 
   if (packetSize) {
 
+    if (!canbusIsReceiving) {
+      sendUDPData(String("cs:CanBus is Active"));
+    }
+    canbusIsReceiving = true;
     newCanbusData = false;
     // received a packet
-    // Serial.print("Received ");
-    // if (CAN.packetExtended()) {
-    //   Serial.print("extended ");
-    // }
+    Serial.print("Received ");
+    Serial.println(CAN.packetId());
+    //if (CAN.packetExtended()) {
+    //  Serial.print("extended ");
+    //}
     if (CAN.packetRtr()) {
       // Remote transmission request, packet contains no data
       //   Serial.print("RTR ");
@@ -181,47 +275,11 @@ void loop() {
       }
       if (canbus_dataload[1] != 12 && canbus_dataload[2] != 80) {  // when turning on/off the lights bytes 1 and 2 are switching momentarily
         canbus_speed = canbus_dataload[2];                         // word(canbus_dataload[3], canbus_dataload[2]);// / 100;
-        Serial.print("s");
-        Serial.print(canbus_speed);
-        Serial.println();
-        if (central && central.connected()) {
-          speedReading.writeValue(canbus_speed);
-        }
-        if (canbus_speed > 0) {
-          // read accelaration data
-          acceleration();
-
-          if (central && central.connected()) {
-            //headingReading.writeValue(heading_int);
-            //pitchReading.writeValue(pitch_int);
-            gyroXReading.writeValue(gyro_x_accel);
-          }
-        }
-      }
-    } else if (CAN.packetId() == 0x260) {
-      // STEERING ANGLE e.g.  id      data length   data
-      //                      0x260   8             00 00 00 00 00 FF 56 BF 19
-
-      int i = 0;
-      while (CAN.available() && i < packetSize) {
-        canbus_dataload[i] = CAN.read();
-        i++;
-      }
-
-      if (canbus_dataload[5] > 0) {  // when 0, steering angle not moved.
-        // byte 5 is taking values 255,254,253... etc when wheel moved clockwise
-        // byte 5 is taking values 1, 2, 3... etc when wheel moved anticlockwise
-        canbus_steeringangle = canbus_dataload[5];
-        Serial.print("a");
-        Serial.print(canbus_dataload[5]);
-        Serial.println();
-        // newCanbusData = true;
-        if (central && central.connected()) {
-          pitchReading.writeValue(canbus_steeringangle);
-        }
+        newCanbusData = true;
       }
 
     } else if (CAN.packetId() == 0x3B3) {
+
       //                            ID      bit-start   bit-count
       // engine-rev (low refresh)   0x3b3   0           16
       // RPM  e.g.  id      data length   data
@@ -232,123 +290,28 @@ void loop() {
         canbus_dataload[i] = CAN.read();
         i++;
       }
-
       canbus_rpm = canbus_dataload[0];  // word(canbus_dataload[1], canbus_dataload[0]);
-      Serial.print("r");
-      Serial.print(canbus_rpm);
-      Serial.println();
-      // newCanbusData = true;
-      if (central && central.connected()) {
-        rpmReading.writeValue(canbus_rpm);
-      }
+      newCanbusData = true;
+      // RPM messages come many times within a second
+      // when engine is turned off, they stop comming
+      // with engine but power on, other messages may arrive
+      // So we use the RPM messages as indication of car engine running
+      lastTimeRPMReceivedInSeconds = seconds();
     }
-  }
-
-  // test
-  //  read accelaration data
-  acceleration();
-
-  if (central && central.connected()) {  // if a central is connected to the peripheral
-    // Serial.print("Connected to central: ");
-    // Serial.println(central.address());  // print the central's BT address
-    digitalWrite(LED_BUILTIN, HIGH);  // turn on the LED to indicate the connection
-  } else {
-    digitalWrite(LED_BUILTIN, LOW);  // when the central disconnects, turn off the LED
-    // Serial.print("Disconnected from central: ");
-    // Serial.println(central.address());
   }
 }
 
 /*!
- *  @brief Print the position result.
- */
-void acceleration(void) {
-  // delay(50);
-  /*
-  float x, y, z;
-
-  if (IMU.accelerationAvailable())
-  {
-    IMU.readAcceleration(x, y, z);    
-    Serial.print(x);
-    Serial.print('\t');
-    //Serial.print(y);
-    //Serial.print('\t');
-    //Serial.println(z);
-
-  }
+    @brief get the G angle of the car on the x axis
 */
-  float gyro_x_accel, y, z;
+void acceleration(void) {
+  //delay(50);
+
+  float x, y, z;
   if (IMU.gyroscopeAvailable()) {
     IMU.readGyroscope(x, y, z);
-    if (gyro_x_accel > 1.0 || gyro_x_accel < -1) { // send to jetson. only above a threshold
-      if (x > 0) {
-        Serial.print("L");
-      } else {
-        Serial.print("R");
-      }
-      Serial.println(gyro_x_accel);
-      //Serial.println('\t');      
-    } 
-    //Serial.print(y);
-    //Serial.print('\t');
-    //Serial.println(z);
+    // the way we install it in the car, to measure the "car's x g movement" we
+    // need to track the devices' "y" axis
+    gyro_x_accel = y;
   }
-  /*
-  float heading, roll, pitch;
-
-  if (IMU.eulerAnglesAvailable()) {
-    IMU.readEulerAngles(heading, roll, pitch);
-    heading_int = heading;
-    pitch_int = pitch;
-    // move everything in the arrays one position forward.
-    for (int i = 1; i > -1; i--) {
-      lastPitchReadings[i + 1] = lastPitchReadings[i];
-      lastHeadingReadings[i + 1] = lastHeadingReadings[i];
-    }
-    // add the new value at 0 position
-    lastPitchReadings[0] = pitch_int;
-    lastHeadingReadings[0] = heading_int;
-    // calculate trend
-    // NOT THE MEDIAN, maybe the mean
-    //int medianPitch = QuickMedian<int>::GetMedian(lastPitchReadings, valuesInt10Length);
-    //int medianHeading = QuickMedian<int>::GetMedian(lastHeadingReadings, valuesInt10Length);
-    int turnIndication = 0;  // 0 = no turn, +1 = right turn, -1 = left turn
-    int diffHeading = 0;
-    if (lastHeadingReadings[1] >= 0 && lastHeadingReadings[1] <= 90 && lastHeadingReadings[0] <= 359 && lastHeadingReadings[0] >= 270) {
-      turnIndication = -1;
-    } else if (lastHeadingReadings[0] >= 0 && lastHeadingReadings[0] <= 90 && lastHeadingReadings[1] <= 359 && lastHeadingReadings[1] >= 270) {
-      turnIndication = 1;
-    } else if (lastHeadingReadings[0] < lastHeadingReadings[1]) {
-      turnIndication = -1;
-    } else if (lastHeadingReadings[0] > lastHeadingReadings[1]) {
-      turnIndication = 1;
-    }
-
-    if (turnIndication < 0) {
-      Serial.print("LEFT \t");
-      Serial.print(x); //gyro accel
-      Serial.print('\t');
-      for (int i = 0; i < 3; i++) {
-        Serial.print(lastHeadingReadings[i]);
-        Serial.print('\t');
-      }
-      Serial.println();
-    } else if (turnIndication > 0) {
-      Serial.print("RIGHT \t");
-      Serial.print(x); //gyro accel
-      Serial.print('\t');
-      for (int i = 0; i < 3; i++) {
-        Serial.print(lastHeadingReadings[i]);
-        Serial.print('\t');
-      }
-      Serial.println();
-    }
-    //Serial.print('\t');
-    //Serial.println(heading_int);
-    //Serial.print(roll);
-    //Serial.print('\t');
-    //Serial.println(pitch);
-  }
-  */
 }

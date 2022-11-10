@@ -12,25 +12,31 @@
   (c) 2020 K. Söderby for Arduino
 */
 
+/// ------------------------ WE CAN NOT USE BOTH BLE AND WIFI AT THE SAME TIME ---------- WITH MKR1010
+
 #include <ArduinoBLE.h>
 #include <CAN.h>
 #include <MKRIMU.h>
-#include <ArduinoLowPower.h>
+#include <WiFiNINA.h>   // use this for MKR1010 or Nano 33 IoT
+//#include <WiFi101.h>  // use this for MKR1000
+
+// put your network SSID and password in
+// a tab called arduino_secrets.h:
+#include "arduino_secrets.h"
 
 BLEService carService("0000dd30-76d9-48e9-aa47-d0538d18f701");  // creating the service
 
 BLEUnsignedIntCharacteristic speedReading("0000dd31-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);    // creating the Speed Value characteristic
 BLEUnsignedIntCharacteristic rpmReading("0000dd32-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);      // creating the rpm Value characteristic
 BLEFloatCharacteristic gyroXReading("0000dd33-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify);  // creating the heading angle Value characteristic
+BLEStringCharacteristic statusReading("0000dd34-76d9-48e9-aa47-d0538d18f701", BLERead | BLENotify, 50);  // creating the status (50chars max) Value characteristic
 
 
-long canbusInterruptTimeInSeconds = 0;
 long lastTimeRPMReceivedInSeconds = 0;
 int canbus_speed = 0;
 int canbus_rpm = 0;
 int canbus_dataload[8];
-// CanBus shiled Pin used to trigger a wakeup (from documentation)
-const int canbusInterruptPin = 7;
+int canbusINTERRUPT_PIN = 7; // check mkr canbus shield documentation
 BLEDevice central;
 bool newCanbusData = false; // new relevant data received (speed and RPM)
 bool canbusIsReceiving = false; // can bus shield is receiving from the can bus (all data)- triggered with interrupt
@@ -38,8 +44,6 @@ float gyro_x_accel = 0.0;
 
 //timekeepeing
 #define seconds() (millis() / 1000)
-const unsigned long deepsleeptime = 60000; // Sleep for 4 hours before waking up to check the battery
-
 
 void setup() {
   Serial.begin(9600);//115200);  // initialize serial communication
@@ -59,14 +63,6 @@ void setup() {
       ;
   }
 
-  // Set interupt function that is triggered when data is received by the can bus
-  CAN.onReceive(onCanBusReceive);
-  // set interupt pin to wake up the main loop from deep sleep when
-  // the can bus shield receives data
-  //pinMode(canbusInterruptPin, INPUT);
-  // Attach a wakeup interrupt on the CanBus shield interrupt pin
-  // trigger function Interrupt Service Routine (ISR)
-  LowPower.attachInterruptWakeup(canbusInterruptPin, ISR, RISING);
 
 
   if (!IMU.begin()) {
@@ -89,20 +85,26 @@ void setup() {
   gyroXReading.writeValue(0.0);
 
   BLE.advertise();  // start advertising the service
-  Serial.println("Bluetooth device active, waiting for connections...");
+  //Serial.println("Bluetooth device active, waiting for connections...");
 
+  pinMode(canbusINTERRUPT_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(canbusINTERRUPT_PIN), CanBusInterruptFunction, CHANGE);
+
+  connectToNetwork(); // connect to wifi if available
   //time
   //Serial.println(seconds());
 }
 
 void loop() {
 
-  // ------ THIS LOOP WILL BE TRIGGERED BY AN INTERRUPT BY THE CAN BUS SHIELD ---//
-  //Serial.println("loop is running");
-
+  if (WiFi.status() != WL_CONNECTED) {
+    connectToNetwork();
+  }
   if (!central || (!central.connected())) {
     central = BLE.central();  // wait for a BLE central
   }
+
+  CanBusReceive();
 
   if (newCanbusData) {
     sendBLEData();
@@ -122,42 +124,47 @@ void loop() {
   if (seconds() - lastTimeRPMReceivedInSeconds > 10) {
     // THE ENGINE HAS STOPPED for almost 10 seconds
     if (canbusIsReceiving) { // if we were receiving data until this point
+      statusReading.writeValue(String("Engine has stopped"));
       canbus_speed = 0;
       canbus_rpm = 0;
       sendBLEData(); // sent the last values. especially RPM 0
-      // The last value for RPM could have been other than 0
-      // so the board receiving from ble RPM values,
-      // can not know if engine is on or off,
-      // untill it receives an RPM = 0, so that it stops object detection
-      delay(1000); // wait 1 seconds.
-      // just so that BLE does not switch off before sending values
+    } else {
+      if (central && central.connected()) {
+        statusReading.writeValue(String("Engine is off"));
+      }
     }
-    newCanbusData = false;
     canbusIsReceiving = false;
-
-    // Set MKR 1010 to low power
-    //Serial.println("going to sleep");
-    //----      LowPower.sleep(8000);
-    //------- FOR TESTING ---//
-    //lastTimeRPMReceivedInSeconds = seconds();
-    // Triggers a 10000 ms sleep (the device will be woken up only by the registered wakeup sources and by internal RTC)
-    // The power consumption of the chip will drop consistently
-    //if (central && central.connected()){
-    //  central.disconnect();
-    //}
-    //Serial.println("going to sleep");
-    //LowPower.deepSleep(8 * 1000); // low power sleeping is ms * 4
+    newCanbusData = false;
   }
 }
 
-// Interrupt Service Routine // triggered on RISING
-// this will wakeup the loop from deep sleep
-void ISR()
-{
-  //Serial.println("WOKE UP");
-  canbusIsReceiving = true;
-  newCanbusData = false; // wait for the appropriate data (speed, rpm)
-  canbusInterruptTimeInSeconds = seconds(); // mark when we woke up
+void connectToNetwork() {
+  // try to connect to the network:
+  while ( WiFi.status() != WL_CONNECTED) {
+    //digitalWrite(LED_BUILTIN, LOW);
+    Serial.print("Attempting to connect to Network named: ");
+    Serial.println(SECRET_SSID);       // print the network name (SSID);
+    // Connect to WPA/WPA2 network:
+    WiFi.begin(SECRET_SSID, SECRET_PASS);
+  }
+  //digitalWrite(LED_BUILTIN, HIGH);
+  // print the SSID of the network you're attached to:
+  if (Serial) Serial.print("Connected to: ");
+  if (Serial) Serial.println(WiFi.SSID());
+
+  // print your WiFi shield's IP address:
+  IPAddress ip = WiFi.localIP();
+  if (Serial) Serial.print("IP Address: ");
+  if (Serial) Serial.println(ip);
+}
+
+void CanBusInterruptFunction() {
+  int val = 0;
+  val = digitalRead(canbusINTERRUPT_PIN);
+  if (central && central.connected()) {
+    statusReading.writeValue(String("CanBus INT Pin status changed to " + String(val)));
+  }
+
 }
 
 void sendBLEData() {
@@ -172,14 +179,24 @@ void sendBLEData() {
   }
 }
 
-// the interupt function , triggered by the canbus shiled when data arrives
-void onCanBusReceive(int packetSize) {
+void CanBusReceive(void) {
+
+  // do the main can-bus sniffing
+  // try to parse packet
+
+  int packetSize = CAN.parsePacket();
 
   if (packetSize) {
+    if (!canbusIsReceiving){
+      if (central && central.connected()) {
+        statusReading.writeValue(String("CanBus is Active"));
+      }
+    }
     canbusIsReceiving = true;
     newCanbusData = false;
     // received a packet
-    //Serial.print("Received ");
+    Serial.print("Received ");
+    Serial.println(CAN.packetId());
     //if (CAN.packetExtended()) {
     //  Serial.print("extended ");
     //}
