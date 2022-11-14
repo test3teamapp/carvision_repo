@@ -60,7 +60,10 @@ bool newCanbusData = false; // new relevant data received (speed and RPM)
 bool canbusIsReceiving = false; // can bus shield is receiving from the can bus (all data)- triggered with interrupt
 
 //PINS
-int powerONJetsonRelay_PIN = 6; // when engine is ON, set to high
+int powerONJetsonRelay_PIN = 5; // when engine is ON, set to high. 
+// DO NOT USE PIN 6 OR 11 
+// PIN 6 IS CONNECTED TO THE NUILD-IN LED, THAT WE TURN ON WHEN SWITCHING ON WIFI
+// When using 11 it stops sending UDP msgs.
 int canbusINTERRUPT_PIN = 7; // check mkr canbus shield documentation
 
 //timekeepeing
@@ -174,14 +177,14 @@ void loop() {
     Serial.println("Sending data " + String(canbus_speed));
     sendUDPData();
     sendUDPData(String("cs:Engine is ON"));
-    //digitalWrite(powerONJetsonRelay_PIN, 1);
+    digitalWrite(powerONJetsonRelay_PIN, 1);
   } else {
     delay(15000);
     canbus_speed = 0;
     canbus_rpm = 0;
     sendUDPData();
     sendUDPData(String("cs:Engine is OFF"));
-    //digitalWrite(powerONJetsonRelay_PIN, 0);
+    digitalWrite(powerONJetsonRelay_PIN, 0);
     delay(10000);
   }
 
