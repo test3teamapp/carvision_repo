@@ -1,8 +1,7 @@
-
 #include <SPI.h>
 #include <CAN.h>
 #include <MKRIMU.h>
-#include <WiFiNINA.h>   // use this for MKR1010 or Nano 33 IoT
+#include <WiFiNINA.h>  // use this for MKR1010 or Nano 33 IoT
 //#include <WiFi101.h>  // use this for MKR1000
 #include <WiFiUdp.h>
 
@@ -10,11 +9,11 @@
 // a tab called arduino_secrets.h:
 #include "arduino_secrets.h"
 
-WiFiUDP Udp;           // instance of UDP library
+WiFiUDP Udp;  // instance of UDP library
 // the address and port of the server
-IPAddress broadcastAddress; // broadcast
-const int port = 20001; // port on which this client sends and receives
-char packetBuffer[256]; //buffer to hold incoming packet
+IPAddress broadcastAddress;  // broadcast
+const int port = 20001;      // port on which this client sends and receives
+char packetBuffer[256];      //buffer to hold incoming packet
 
 long lastTimeRPMReceivedInSeconds = 0;
 long lastTimeWifiConnectedInSeconds = 0;
@@ -23,22 +22,22 @@ int prev_canbus_speed = 0;
 int canbus_rpm = 0;
 float gyro_x_accel = 0.0;
 int canbus_dataload[8];
-bool CANBUS_IS_RECEIVING = false; // can bus shield is receiving from the can bus (all data)- triggered with interrupt
+bool CANBUS_IS_RECEIVING = false;  // can bus shield is receiving from the can bus (all data)- triggered with interrupt
 bool WIFI_IS_CONNECTED = false;
 bool JETSON_IS_ON = false;
-String dataStr = ""; //String data for UDP msg
+String dataStr = "";  //String data for UDP msg
 //PINS
-// DO NOT USE PIN 6 OR 11 
+// DO NOT USE PIN 6 OR 11
 // PIN 6 IS CONNECTED TO THE NUILD-IN LED, THAT WE TURN ON WHEN SWITCHING ON WIFI
 // When using 11 it stops sending UDP msgs.
-int powerONJetsonRelay_PIN = 5; // when engine is ON, set to high. 
-int canbusINTERRUPT_PIN = 7; // check mkr canbus shield documentation // NOT USED IN THIS SKETCH
+int powerONJetsonRelay_PIN = 5;  // when engine is ON, set to high.
+int canbusINTERRUPT_PIN = 7;     // check mkr canbus shield documentation // NOT USED IN THIS SKETCH
 
 //timekeepeing
 #define seconds() (millis() / 1000)
 
 void setup() {
- 
+
   // start the CAN bus at 500 kbps
   if (!CAN.begin(500E3)) {
     while (1)
@@ -58,13 +57,12 @@ void setup() {
   JETSON_IS_ON = false;
   lastTimeRPMReceivedInSeconds = 0;
   lastTimeWifiConnectedInSeconds = 0;
-
 }
 
 void loop() {
-    // put this in the loop, end not in setup
-    // so that we reconnect 
-    // But use local bool instead of contiuesly using WIFI.Status()
+  // put this in the loop, end not in setup
+  // so that we reconnect
+  // But use local bool instead of contiuesly using WIFI.Status()
   if (!WIFI_IS_CONNECTED) {
     connectToNetwork();
   }
@@ -84,7 +82,7 @@ void loop() {
     CANBUS_IS_RECEIVING = true;
     // received a packet
     //if (CAN.packetExtended()) {
-    //  
+    //
     //}
     if (CAN.packetRtr()) {
       // Remote transmission request, packet contains no data
@@ -104,16 +102,16 @@ void loop() {
       }
       if (canbus_dataload[1] != 12 && canbus_dataload[2] != 80) {  // when turning on/off the lights bytes 1 and 2 are switching momentarily
         canbus_speed = canbus_dataload[2];                         // word(canbus_dataload[3], canbus_dataload[2]);// / 100;
-        if (canbus_speed != prev_canbus_speed){  // do not send if the same// do not waste resources
-            dataStr = String("speed:" + String(canbus_speed));
-            sendUDPData(dataStr);
+        if (canbus_speed != prev_canbus_speed) {                   // do not send if the same// do not waste resources
+          dataStr = String("speed:" + String(canbus_speed));
+          sendUDPData(dataStr);
         }
         prev_canbus_speed = canbus_speed;
-        if (canbus_speed > 0) { // we care about accel only when the car is moving
-        // read accelaration data
-            acceleration();
-            dataStr = String("gx:" + String(gyro_x_accel));
-            sendUDPData(dataStr);
+        if (canbus_speed > 0) {  // we care about accel only when the car is moving
+                                 // read accelaration data
+          acceleration();
+          dataStr = String("gx:" + String(gyro_x_accel));
+          sendUDPData(dataStr);
         }
       }
 
@@ -134,9 +132,9 @@ void loop() {
       // so we know engine is off
       //dataStr = String("rpm:" + String(canbus_rpm));
       //sendUDPData(dataStr);
-      if (!JETSON_IS_ON){
+      if (!JETSON_IS_ON) {
         if (canbus_rpm > 0) {
-          digitalWrite(powerONJetsonRelay_PIN, 1); // switch on power for jetson
+          digitalWrite(powerONJetsonRelay_PIN, 1);  // switch on power for jetson
           JETSON_IS_ON = true;
           sendUDPData(String("cs:Engine is ON"));
         }
@@ -149,26 +147,26 @@ void loop() {
     }
   }
 
-  if (JETSON_IS_ON){
+  if (JETSON_IS_ON) {
     if (seconds() - lastTimeRPMReceivedInSeconds > 20) {
       // THE ENGINE HAS STOPPED for almost 20 seconds
-      if (CANBUS_IS_RECEIVING) { // if we were receiving data until this point   
+      if (CANBUS_IS_RECEIVING) {  // if we were receiving data until this point
         canbus_rpm = 0;
         dataStr = String("rpm:" + String(canbus_rpm));
         sendUDPData(dataStr);
         sendUDPData(String("cs:Engine is OFF"));
-        digitalWrite(powerONJetsonRelay_PIN, 0); // power off jetson
+        digitalWrite(powerONJetsonRelay_PIN, 0);  // power off jetson
         JETSON_IS_ON = false;
-        CANBUS_IS_RECEIVING = false; // reset this. we will need to receive new CAN BUS data to be set to true again
+        CANBUS_IS_RECEIVING = false;  // reset this. we will need to receive new CAN BUS data to be set to true again
       }
     }
   }
 
-  if (seconds() - lastTimeWifiConnectedInSeconds > 300){
-     // check if wifi is down using the actual WiFI.Status() method and not our boolean
-      if (WiFi.status() != WL_CONNECTED) {
-         connectToNetwork();
-      }
+  if (seconds() - lastTimeWifiConnectedInSeconds > 300) {
+    // check if wifi is down using the actual WiFI.Status() method and not our boolean
+    if (WiFi.status() != WL_CONNECTED) {
+      connectToNetwork();
+    }
   }
 }
 
@@ -218,8 +216,8 @@ IPAddress getBroadcastIP() {
 void sendUDPData(String str) {
   // start a new packet:
   Udp.beginPacket(broadcastAddress, port);
-  Udp.println(str);    // add payload to it
-  Udp.endPacket();     // finish and send packet
+  Udp.println(str);  // add payload to it
+  Udp.endPacket();   // finish and send packet
 }
 
 
