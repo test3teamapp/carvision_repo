@@ -19,7 +19,9 @@ float gyro_y_accel = 0.0;
 // CAN BUS : D3, B8, D9, D10
 // IMU SHILED : D11 (SDA), D12 (SCL)
 // TRIGGER PIN FOR POWERING ON JETSON USING RELAY
-#define RELAY_PIN 6
+// DO NOT USE PIN 6 OR 11 
+// PIN 6 IS CONNECTED TO THE NUILD-IN LED, THAT WE TURN ON WHEN SWITCHING ON WIFI
+#define RELAY_PIN 5
 
 //timekeepeing
 #define seconds() (millis() / 1000)
