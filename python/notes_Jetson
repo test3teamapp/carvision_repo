@@ -1,0 +1,7 @@
+notes
+
+pip install netifaces
+sudo pip install Jetson.GPIO
+
+detectnetWithUDPServer_Jetson.py csi://0 display://0 --input-width=1280 --input-height=720 --threashold=0.3 
+detectnetWithUDPServer_Jetson.py csi://0 --input-width=1280 --input-height=720 --threashold=0.3 --overlay=none
