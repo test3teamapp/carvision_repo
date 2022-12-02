@@ -17,9 +17,12 @@ char packetBuffer[256];      //buffer to hold incoming packet
 
 long lastTimeRPMReceivedInSeconds = 0;
 long lastTimeWifiConnectedInSeconds = 0;
+long lastTimeTriedToConnecteToWifiSeconds = 0;
 int canbus_speed = 0;
 int prev_canbus_speed = 0;
 int canbus_rpm = 0;
+int canbus_steeringangle = 0;
+int prev_canbus_steeringangle = 0;
 float gyro_x_accel = 0.0;
 int canbus_dataload[8];
 bool CANBUS_IS_RECEIVING = false;  // can bus shield is receiving from the can bus (all data)- triggered with interrupt
@@ -38,17 +41,24 @@ int canbusINTERRUPT_PIN = 7;     // check mkr canbus shield documentation // NOT
 
 void setup() {
 
+  //Serial.begin(115200);  // initialize serial communication
+
   // start the CAN bus at 500 kbps
   if (!CAN.begin(500E3)) {
     while (1)
       ;
   }
 
-  if (!IMU.begin()) {
-    while (1)
-      ;
-  }
+  // DO NOT USE ACCELEREROMETER FOR STERRING ANGLE CALCULATION
+  // USE STERRING ANGLE FROM CAN BUS --->> see further down
 
+  //  if (!IMU.begin()) {
+  //    while (1)
+  //      ;
+  //  }
+
+  // pinMode(canbusINTERRUPT_PIN, INPUT_PULLUP);
+  // attachInterrupt(digitalPinToInterrupt(canbusINTERRUPT_PIN), CanBusInterruptFunction, CHANGE);
   pinMode(powerONJetsonRelay_PIN, OUTPUT);
   digitalWrite(powerONJetsonRelay_PIN, 0);
 
@@ -107,12 +117,14 @@ void loop() {
           sendUDPData(dataStr);
         }
         prev_canbus_speed = canbus_speed;
-        if (canbus_speed > 0) {  // we care about accel only when the car is moving
-                                 // read accelaration data
-          acceleration();
-          dataStr = String("gx:" + String(gyro_x_accel));
-          sendUDPData(dataStr);
-        }
+        // DO NOT USE ACCELEREROMETER FOR STERRING ANGLE CALCULATION
+        // USE STERRING ANGLE FROM CAN BUS --->> see further down
+        //        if (canbus_speed > 0) {  // we care about accel only when the car is moving
+        //          // read accelaration data
+        //          acceleration();
+        //          dataStr = String("gx:" + String(gyro_x_accel));
+        //          sendUDPData(dataStr);
+        //        }
       }
 
     } else if (CAN.packetId() == 0x3B3) {
@@ -144,6 +156,36 @@ void loop() {
       // with engine but power on, other messages may arrive
       // So we use the RPM messages as indication of car engine running
       lastTimeRPMReceivedInSeconds = seconds();
+
+    }  else if (CAN.packetId() == 0x260) {
+      // STEERING ANGLE e.g.  id      data length   data
+      //                      0x260   8             00 00 00 00 00 FF 56 BF 19
+
+      int i = 0;
+      while (CAN.available() && i < packetSize) {
+        canbus_dataload[i] = CAN.read();
+        i++;
+      }
+      canbus_steeringangle = canbus_dataload[5];
+      if (canbus_steeringangle > 0) {  // when 0, steering angle not moved.
+        // byte 5 is taking values 255,254,253... etc when wheel moved clockwise
+        // byte 5 is taking values 1, 2, 3... etc when wheel moved anticlockwise
+        if (canbus_steeringangle != prev_canbus_steeringangle) {                   // do not send if the same// do not waste resources
+
+          if (canbus_steeringangle > 1 && canbus_steeringangle < 180) {
+            if (canbus_speed > 0) {  // we care about steering only when the car is moving
+              dataStr = String("gx:" + String(-1 * canbus_steeringangle));
+              sendUDPData(dataStr);
+            }
+          } else if (canbus_steeringangle < 255 && canbus_steeringangle > 180) {
+            if (canbus_speed > 0) {  // we care about steering only when the car is moving
+              dataStr = String("gx:" + String(256 - canbus_steeringangle));
+              sendUDPData(dataStr);
+            }
+          }
+        }
+      }
+      prev_canbus_steeringangle = canbus_steeringangle;
     }
   }
 
@@ -162,13 +204,19 @@ void loop() {
     }
   }
 
-  if (seconds() - lastTimeWifiConnectedInSeconds > 300) {
+  if (seconds() - lastTimeWifiConnectedInSeconds > 60) { // check network connection every 1 minute
+    //Serial.println("1 minute since last connection / check for connection ");
+    lastTimeWifiConnectedInSeconds = seconds();
     // check if wifi is down using the actual WiFI.Status() method and not our boolean
     if (WiFi.status() != WL_CONNECTED) {
+      //Serial.println("wifi is disconnected  ");
+      WIFI_IS_CONNECTED = false;
+      digitalWrite(LED_BUILTIN, LOW);
       connectToNetwork();
     }
   }
 }
+
 
 // not used currently
 void udpReceive() {
@@ -187,6 +235,10 @@ void udpReceive() {
 
 void connectToNetwork() {
   // try to connect to the network:
+
+  if (seconds() - lastTimeTriedToConnecteToWifiSeconds < 5) return; // do not retry connecting within 5 seconds.
+
+  lastTimeTriedToConnecteToWifiSeconds = seconds();
 
   for (byte networkCounter = 0; networkCounter < sizeof(SSIDs) / sizeof(SSIDs[0]); networkCounter++) {
     digitalWrite(LED_BUILTIN, LOW);
@@ -213,11 +265,23 @@ IPAddress getBroadcastIP() {
   return broadcastIp;
 }
 
+// DO NOT USE. CHANGES VALUE TO OFTEN AND DRAINS THE PROCESSING POWER
+// AND IF SENDING ANYTHING OVER USD, WE SATURATE THE BUFFER
+
+// void CanBusInterruptFunction() {
+//   int val = 0;
+//   val = digitalRead(canbusINTERRUPT_PIN);
+//   sendUDPData(String("cs:CanBus pin value = " + String(val)));
+
+// }
+
 void sendUDPData(String str) {
-  // start a new packet:
-  Udp.beginPacket(broadcastAddress, port);
-  Udp.println(str);  // add payload to it
-  Udp.endPacket();   // finish and send packet
+  if (WIFI_IS_CONNECTED) {
+    // start a new packet:
+    Udp.beginPacket(broadcastAddress, port);
+    Udp.println(str);  // add payload to it
+    Udp.endPacket();   // finish and send packet
+  }
 }
 
 
