@@ -16,6 +16,7 @@ const int port = 20001;      // port on which this client sends and receives
 char packetBuffer[256];      //buffer to hold incoming packet
 
 long lastTimeRPMReceivedInSeconds = 0;
+long lastTimeRPMSendInSeconds = 0;
 long lastTimeWifiConnectedInSeconds = 0;
 long lastTimeTriedToConnecteToWifiSeconds = 0;
 int canbus_speed = 0;
@@ -67,6 +68,8 @@ void setup() {
   JETSON_IS_ON = false;
   lastTimeRPMReceivedInSeconds = 0;
   lastTimeWifiConnectedInSeconds = 0;
+  lastTimeRPMSendInSeconds = 0;
+  lastTimeTriedToConnecteToWifiSeconds = 0;
 }
 
 void loop() {
@@ -140,7 +143,7 @@ void loop() {
         i++;
       }
       canbus_rpm = canbus_dataload[0];  // word(canbus_dataload[1], canbus_dataload[0]);
-      // do not send RPMs. We only care about RPM if they are > 0, or we are not receiving them any more
+      // do not send continusly RPMs. We only care about RPM if they are > 0, or we are not receiving them any more
       // so we know engine is off
       //dataStr = String("rpm:" + String(canbus_rpm));
       //sendUDPData(dataStr);
@@ -150,14 +153,21 @@ void loop() {
           JETSON_IS_ON = true;
           sendUDPData(String("cs:Engine is ON"));
         }
+      } else {  // JETSON has started
+        // sent periodically, to trigger the detection process
+        if (seconds() - lastTimeRPMSendInSeconds > 2) {
+          dataStr = String("rpm:" + String(canbus_rpm));
+          sendUDPData(dataStr);
+          lastTimeRPMSendInSeconds = seconds();
+        }
       }
       // RPM messages come many times within a second
       // when engine is turned off, they stop comming
       // with engine but power on, other messages may arrive
       // So we use the RPM messages as indication of car engine running
       lastTimeRPMReceivedInSeconds = seconds();
-
-    }  else if (CAN.packetId() == 0x260) {
+    }
+    /*  else if (CAN.packetId() == 0x260) {
       // STEERING ANGLE e.g.  id      data length   data
       //                      0x260   8             00 00 00 00 00 FF 56 BF 19
 
@@ -173,20 +183,20 @@ void loop() {
         if (canbus_steeringangle != prev_canbus_steeringangle) {                   // do not send if the same// do not waste resources
 
           if (canbus_steeringangle > 1 && canbus_steeringangle < 180) {
-            if (canbus_speed > 0) {  // we care about steering only when the car is moving
+            //if (canbus_speed > 0) {  // we care about steering only when the car is moving
               dataStr = String("gx:" + String(-1 * canbus_steeringangle));
               sendUDPData(dataStr);
-            }
+            //}
           } else if (canbus_steeringangle < 255 && canbus_steeringangle > 180) {
-            if (canbus_speed > 0) {  // we care about steering only when the car is moving
+            //if (canbus_speed > 0) {  // we care about steering only when the car is moving
               dataStr = String("gx:" + String(256 - canbus_steeringangle));
               sendUDPData(dataStr);
-            }
+            //}
           }
         }
       }
       prev_canbus_steeringangle = canbus_steeringangle;
-    }
+    }*/
   }
 
   if (JETSON_IS_ON) {
@@ -204,7 +214,7 @@ void loop() {
     }
   }
 
-  if (seconds() - lastTimeWifiConnectedInSeconds > 60) { // check network connection every 1 minute
+  if (seconds() - lastTimeWifiConnectedInSeconds > 60) {  // check network connection every 1 minute
     //Serial.println("1 minute since last connection / check for connection ");
     lastTimeWifiConnectedInSeconds = seconds();
     // check if wifi is down using the actual WiFI.Status() method and not our boolean
@@ -236,7 +246,7 @@ void udpReceive() {
 void connectToNetwork() {
   // try to connect to the network:
 
-  if (seconds() - lastTimeTriedToConnecteToWifiSeconds < 5) return; // do not retry connecting within 5 seconds.
+  if (seconds() - lastTimeTriedToConnecteToWifiSeconds < 5) return;  // do not retry connecting within 5 seconds.
 
   lastTimeTriedToConnecteToWifiSeconds = seconds();
 
