@@ -97,7 +97,7 @@ threshold = 0.3
 # 5  bus
 # 7  truck
 # 17  dog
-roadObstacles_cocoids = [0,1,2,3,5,7,17]
+roadObstacles_cocoids = [0,1,2,3,5,7]
 
 # Pin Definitions
 buzzer_output_pin = 18  # BCM pin 18, BOARD pin 12
@@ -144,7 +144,7 @@ def detectCollision(detections):
         # 3  motorcycle
         # 5  bus
         # 7  truck
-        # 17  dog
+        # 17  dog // remove
 
         if (obj.ClassID in roadObstacles_cocoids):
             point = [0,0]
@@ -209,7 +209,25 @@ def updateCollisionBox():
     if (cardataSpeed.value > 100):
       cardataSpeed.value = 100
 
-    speed = cardataSpeed.value * 3 
+    speed = cardataSpeed.value
+    if (cardataSpeed.value < 10):
+        speed = cardataSpeed.value * 12
+    elif (cardataSpeed.value < 20):
+        speed = cardataSpeed.value * 11
+    elif (cardataSpeed.value < 30):
+        speed = cardataSpeed.value * 10
+    elif (cardataSpeed.value < 40):
+        speed = cardataSpeed.value * 9
+    elif (cardataSpeed.value < 50):
+        speed = cardataSpeed.value * 8
+    elif (cardataSpeed.value < 60):
+        speed = cardataSpeed.value * 7
+    elif (cardataSpeed.value < 70):
+        speed = cardataSpeed.value * 5
+    elif (cardataSpeed.value < 80):
+        speed = cardataSpeed.value * 3
+
+
     #first calculate the length / height of the coalision area, using 0.1 as the default value for Gx accelaration
     gx = 0.001
 
