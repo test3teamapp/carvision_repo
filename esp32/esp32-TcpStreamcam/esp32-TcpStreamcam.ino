@@ -2,7 +2,6 @@
 #include <esp_int_wdt.h>
 #include <esp_task_wdt.h>
 #include <WiFi.h>
-#include <WiFiUdp.h>
 #include "src/parsebytes.h"
 #include "time.h"
 
@@ -59,40 +58,18 @@ IPAddress net;
 IPAddress gw;
 
 // Declare external function from app_httpd.cpp
-extern void startCameraServer(int hPort, int sPort);
-extern void startUdpServer(int hPort, int sPort);
+extern void startUdpServer(int localUdpPort, int remoteTcpPort);
 extern void serialDump();
 
 // Names for the Camera. (set these in myconfig.h)
-#if defined(CAM_NAME)
-    char myName[] = CAM_NAME;
-#else
-    char myName[] = "ESP32 camera server";
-#endif
-
-
-// Ports for http and stream (override in myconfig.h)
-#if defined(UDP_PORT)
-    int udpPort = UDP_PORT;
-#else
-    int udpPort = 20001; // udp port for waiting the request for TCP connection
-#endif
-
-#if defined(STREAM_PORT)
-    int streamPort = STREAM_PORT;
-#else
-    int streamPort = 20002; // default port for the TCP StreamCamReceiver apps/scripts
-#endif
-
-#if !defined(WIFI_WATCHDOG)
-    #define WIFI_WATCHDOG 15000
-#endif
+char myName[] = "ESP32 camera server";
+int udpPort = 20001; // udp port for waiting the request for TCP connection
+int streamPort = 20002; // default port for the TCP StreamCamReceiver apps/scripts
+#define WIFI_WATCHDOG 15000
 
 // Number of known networks in stationList[]
 int stationCount = sizeof(stationList)/sizeof(stationList[0]);
 int firstStation = 0;
-
-
 
 // Counters for info screens and debug
 int8_t streamCount = 0;          // Number of currently active streams
@@ -109,24 +86,14 @@ int sensorPID;
 // Camera module bus communications frequency.
 // Originally: config.xclk_freq_mhz = 20000000, but this lead to visual artifacts on many modules.
 // See https://github.com/espressif/esp32-camera/issues/150#issuecomment-726473652 et al.
-#if !defined (XCLK_FREQ_MHZ)
-    unsigned long xclk = 8;
-#else
-    unsigned long xclk = XCLK_FREQ_MHZ;
-#endif
+unsigned long xclk = 8;
 
 // initial rotation
 // can be set in myconfig.h
-#if !defined(CAM_ROTATION)
-    #define CAM_ROTATION 0
-#endif
-int myRotation = CAM_ROTATION;
+int myRotation = 0;
 
 // minimal frame duration in ms, effectively 1/maxFPS
-#if !defined(MIN_FRAME_TIME)
-    #define MIN_FRAME_TIME 0
-#endif
-int minFrameTime = MIN_FRAME_TIME;
+int minFrameTime = 0;
 
 // Illumination LAMP and status LED
 #if defined(LAMP_DISABLE)
@@ -157,9 +124,6 @@ const int pwmMax = pow(2,pwmresolution)-1;
 #else
     bool filesystem = true;
 #endif
-
-
-bool otaEnabled = false;
 
 #if defined(NTPSERVER)
     bool haveTime = true;
@@ -435,9 +399,6 @@ void WifiSetup() {
                 Serial.println();
             }
         }
-    } else {
-        // No list to scan, therefore we are an accesspoint
-        accesspoint = true;
     }
 
     if (bestStation == -1) {
@@ -446,32 +407,7 @@ void WifiSetup() {
         Serial.printf("Connecting to Wifi Network %d: [%02X:%02X:%02X:%02X:%02X:%02X] %s \r\n",
                        bestStation, bestBSSID[0], bestBSSID[1], bestBSSID[2], bestBSSID[3],
                        bestBSSID[4], bestBSSID[5], bestSSID);
-        // Apply static settings if necesscary
-        if (stationList[bestStation].dhcp == false) {
-            #if defined(ST_IP)
-                Serial.println("Applying static IP settings");
-                #if !defined (ST_GATEWAY)  || !defined (ST_NETMASK)
-                    #error "You must supply both Gateway and NetMask when specifying a static IP address"
-                #endif
-                IPAddress staticIP(ST_IP);
-                IPAddress gateway(ST_GATEWAY);
-                IPAddress subnet(ST_NETMASK);
-                #if !defined(ST_DNS1)
-                    WiFi.config(staticIP, gateway, subnet);
-                #else
-                    IPAddress dns1(ST_DNS1);
-                #if !defined(ST_DNS2)
-                    WiFi.config(staticIP, gateway, subnet, dns1);
-                #else
-                    IPAddress dns2(ST_DNS2);
-                    WiFi.config(staticIP, gateway, subnet, dns1, dns2);
-                #endif
-                #endif
-            #else
-                Serial.println("Static IP settings requested but not defined in config, falling back to dhcp");
-            #endif
-        }
-
+       
         // Initiate network connection request (3rd argument, channel = 0 is 'auto')
         WiFi.begin(bestSSID, stationList[bestStation].password, 0, bestBSSID);
 
@@ -509,7 +445,7 @@ void setup() {
     Serial.setDebugOutput(true);
     Serial.println();
     Serial.println("====");
-    Serial.print("esp32-cam-webserver: ");
+    Serial.print("esp32-TcpStreamcam: ");
     Serial.println(myName);
     Serial.print("Code Built: ");
     Serial.println(myVer);
@@ -529,7 +465,7 @@ void setup() {
     if (stationCount == 0) {
         Serial.println("\r\nFatal Error; Halting");
         while (true) {
-            Serial.println("No wifi details have been configured; we cannot connect to existing WiFi or start our own AccessPoint, there is no point in proceeding.");
+            Serial.println("No wifi details have been configured; we cannot connect to existing WiFi, there is no point in proceeding.");
             delay(5000);
         }
     }
@@ -560,7 +496,7 @@ void setup() {
     * Camera setup complete; initialise the rest of the hardware.
     */
 
-    // Start Wifi and loop until we are connected or have started an AccessPoint
+    // Start Wifi and loop until we are connected
     while ((WiFi.status() != WL_CONNECTED))  {
         WifiSetup();
         delay(1000);

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <esp_http_server.h>
 #include <esp_timer.h>
 #include <esp_camera.h>
 #include <esp_int_wdt.h>
@@ -51,14 +50,6 @@ extern bool debugData;
 extern bool haveTime;
 extern unsigned long xclk;
 extern int sensorPID;
-
-typedef struct {
-  httpd_req_t *req;
-  size_t len;
-} jpg_chunking_t;
-
-httpd_handle_t stream_httpd = NULL;
-httpd_handle_t camera_httpd = NULL;
 
 // Flag that can be set to kill all active streams
 bool streamKill;
@@ -130,7 +121,7 @@ void serialDump() {
   return;
 }
 
-static esp_err_t capture_handler(httpd_req_t *req) {
+static esp_err_t capture_handler() {
   camera_fb_t *fb = NULL;
   esp_err_t res = ESP_OK;
 
@@ -146,19 +137,14 @@ static esp_err_t capture_handler(httpd_req_t *req) {
   fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("CAPTURE: failed to acquire frame");
-    httpd_resp_send_500(req);
     if (autoLamp && (lampVal != -1)) setLamp(0);
     return ESP_FAIL;
   }
 
-  httpd_resp_set_type(req, "image/jpeg");
-  httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.jpg");
-  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-
   size_t fb_len = 0;
   if (fb->format == PIXFORMAT_JPEG) {
     fb_len = fb->len;
-    res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
+    //res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
   } else {
     res = ESP_FAIL;
     Serial.println("Capture Error: Non-JPEG image returned by camera module");
@@ -177,7 +163,7 @@ static esp_err_t capture_handler(httpd_req_t *req) {
   return res;
 }
 
-static esp_err_t stream_handler(httpd_req_t *req) {
+static esp_err_t stream_handler() {
   camera_fb_t *fb = NULL;
   esp_err_t res = ESP_OK;
   size_t _jpg_buf_len = 0;
@@ -215,10 +201,10 @@ static esp_err_t stream_handler(httpd_req_t *req) {
     }
     if (res == ESP_OK) {
       size_t hlen = snprintf((char *)part_buf, 64, "", _jpg_buf_len);
-      res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+      //res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
     }
     if (res == ESP_OK) {
-      res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
+      //res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
     }
 
     if (fb) {
@@ -261,45 +247,29 @@ static esp_err_t stream_handler(httpd_req_t *req) {
   return res;
 }
 
-static esp_err_t stop_handler(httpd_req_t *req) {
+static esp_err_t stop_handler() {
   flashLED(75);
   Serial.println("\r\nStream stop requested via Web");
   streamKill = true;
-  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-  return httpd_resp_send(req, NULL, 0);
+  //httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+  return ESP_OK; //httpd_resp_send(req, NULL, 0);
 }
 
-static esp_err_t error_handler(httpd_req_t *req) {
+static esp_err_t error_handler() {
   flashLED(75);
   Serial.println("Sending error page");
   std::string s("");
   size_t index;
-  return httpd_resp_send(req, (const char *)s.c_str(), s.length());
+  return ESP_OK; //httpd_resp_send(req, (const char *)s.c_str(), s.length());
 }
 
-void startCameraServer(int hPort, int sPort) {
-  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.max_uri_handlers = 16;  // we use more than the default 8 (on port 80)
-
-  // Request Handlers; config.max_uri_handlers (above) must be >= the number of handlers
-  config.server_port = hPort;
-  config.ctrl_port = hPort;
-  Serial.printf("Starting udp server on port: '%d'\r\n", config.server_port);
-  if (httpd_start(&camera_httpd, &config) == ESP_OK) {
-    if (critERR.length() > 0) {
-      
-    } 
-  }
-
-  config.server_port = sPort;
-  config.ctrl_port = sPort;
-  Serial.printf("Starting stream server on port: '%d'\r\n", config.server_port);
-  if (httpd_start(&stream_httpd, &config) == ESP_OK) {
-    if (critERR.length() > 0) {
-     
-    } 
-  }
+// this is not called by the main program
+// The UDP server controls the creation of the stream
+void startCameraStream(IPAddress remoteIp,int remoteTcpPort) {
+  Serial.printf("Starting stream to: '%d'.'%d'.'%d'.'%d' on port: '%d'\r\n",remoteIp[0],remoteIp[1],remoteIp[2],remoteIp[3],remoteTcpPort);
 }
 
-void startUdpServer(int hPort, int sPort) {
+void startUdpServer(int localUdpPort, int remoteTcpPort) {
+  Serial.printf("Starting udp server on port: '%d'\r\n", localUdpPort);
+    
 }
