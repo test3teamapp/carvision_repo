@@ -22,7 +22,7 @@
  *    just replace your ssid and password in the line below.
  */
 
-struct station stationList[] = {{"MYSERVICE","olatalefta2u", true}};
+struct station stationList[] = {{"MYSERVICE","olatalefta2u", true}, {"Wind WiFi x6JpcR","Onasougamiso1moretime()", true}};
 
 /*
  * You can extend the stationList[] above with additional SSID+Password pairs

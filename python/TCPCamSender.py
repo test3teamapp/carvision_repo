@@ -44,9 +44,6 @@ class TCPCamSender:
         self.startTCP = Value('B',0)
         self.tcpState = Value('i',int(TCP_STATE.DOWN))
         self.tcpProcess = Process()
-        # created an unbounded queue for accessing the state variable from the new process
-        #self.queue = Queue()
-        #self.queue.put(self.tcpState)
    
     def setRemoteIPandPort(self,remoteIP, tcpPort):
         self.remoteIP = remoteIP
@@ -101,7 +98,6 @@ class TCPCamSender:
 
         self.my_print(f"TCP server connection established @ {ipaddr}")
         self.tcpState.value = int(TCP_STATE.CONNECTED)
-        #stateQueue.put(self.tcpState)
 
         if (_SHOULD_DETECT):
             # create a detector

@@ -19,6 +19,10 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include "storage.h"
+#include "AsyncUDP.h"
+#include "esp_log.h"
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
 // Functions from the main .ino
 extern void flashLED(int flashtime);
@@ -26,6 +30,7 @@ extern void setLamp(int newVal);
 extern void printLocalTime(bool extraData);
 
 // External variables declared in the main .ino
+extern AsyncUDP udp;
 extern char myName[];
 extern char myVer[];
 extern char baseVersion[];
@@ -53,11 +58,12 @@ extern int sensorPID;
 
 // Flag that can be set to kill all active streams
 bool streamKill;
+int tcpStreamSocket;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-  uint8_t temprature_sens_read();
+uint8_t temprature_sens_read();
 #ifdef __cplusplus
 }
 #endif
@@ -163,7 +169,49 @@ static esp_err_t capture_handler() {
   return res;
 }
 
+static esp_err_t tcp_connection_handler(IPAddress remoteIp, int remoteTcpPort) {
+  Serial.printf("Trying to connect to: '%d'.'%d'.'%d'.'%d' on port: '%d'\r\n", remoteIp[0], remoteIp[1], remoteIp[2], remoteIp[3], remoteTcpPort);
+  esp_err_t res = ESP_OK;
+  int addr_family = 0;
+  int ip_protocol = 0;
+  struct sockaddr_in dest_addr;
+  dest_addr.sin_addr.s_addr = remoteIp;
+  dest_addr.sin_family = AF_INET;
+  dest_addr.sin_port = htons(remoteTcpPort);
+  addr_family = AF_INET;
+  ip_protocol = IPPROTO_IP;
+
+  tcpStreamSocket =  socket(addr_family, SOCK_STREAM, ip_protocol);
+  if (tcpStreamSocket < 0) {
+    Serial.printf("Unable to create socket: errno %d", errno);
+    res = ESP_FAIL;
+    return res;
+  }
+  Serial.println( "Socket created");
+
+  int err = connect(tcpStreamSocket, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+  if (err != 0) {
+    Serial.printf( "Socket unable to connect: errno %d\r\n", errno);
+    res = ESP_FAIL;
+    return res;
+  }
+  Serial.printf( "Successfully connected\r\n");
+
+  return res;
+}
+
+static unsigned char* size_t2byte_array(size_t val) {
+  unsigned char buff[4];
+  buff[0] = (val & 0xff);
+  buff[1] = ((val >> 8) & 0xff);
+  buff[2] = ((val >> 16) & 0xff);
+  buff[3] = ((val >> 24) & 0xff);
+
+  return buff;
+}
+
 static esp_err_t stream_handler() {
+
   camera_fb_t *fb = NULL;
   esp_err_t res = ESP_OK;
   size_t _jpg_buf_len = 0;
@@ -199,12 +247,24 @@ static esp_err_t stream_handler() {
         _jpg_buf = fb->buf;
       }
     }
-    if (res == ESP_OK) {
-      size_t hlen = snprintf((char *)part_buf, 64, "", _jpg_buf_len);
-      //res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+    if (res == ESP_OK) { // send the length first in 4 bytes
+      unsigned char buff[4];
+      buff[0] = (_jpg_buf_len & 0xff);
+      buff[1] = ((_jpg_buf_len >> 8) & 0xff);
+      buff[2] = ((_jpg_buf_len >> 16) & 0xff);
+      buff[3] = ((_jpg_buf_len >> 24) & 0xff);
+      int err = send(tcpStreamSocket, buff, 4, 0);
+      if (err < 0) {
+        Serial.printf("Error occurred during sending img data length: errno %d\r\n", errno);
+        res = ESP_FAIL;
+      }
     }
     if (res == ESP_OK) {
-      //res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
+      int err = send(tcpStreamSocket, _jpg_buf, _jpg_buf_len, 0);
+      if (err < 0) {
+        Serial.printf("Error occurred during sending img data: errno %d\r\n", errno);
+        res = ESP_FAIL;
+      }
     }
 
     if (fb) {
@@ -226,6 +286,7 @@ static esp_err_t stream_handler() {
       Serial.printf("Stream killed\r\n");
       break;
     }
+
     int64_t frame_time = esp_timer_get_time() - last_frame;
     frame_time /= 1000;
     int32_t frame_delay = (minFrameTime > frame_time) ? minFrameTime - frame_time : 0;
@@ -237,6 +298,12 @@ static esp_err_t stream_handler() {
                     (uint32_t)frame_time, frame_delay, 1000.0 / (uint32_t)(frame_time + frame_delay));
     }
     last_frame = esp_timer_get_time();
+  }
+
+  if (tcpStreamSocket != -1) {
+    Serial.printf("Shutting down socket ...");
+    shutdown(tcpStreamSocket, 0);
+    close(tcpStreamSocket);
   }
 
   streamsServed++;
@@ -265,11 +332,40 @@ static esp_err_t error_handler() {
 
 // this is not called by the main program
 // The UDP server controls the creation of the stream
-void startCameraStream(IPAddress remoteIp,int remoteTcpPort) {
-  Serial.printf("Starting stream to: '%d'.'%d'.'%d'.'%d' on port: '%d'\r\n",remoteIp[0],remoteIp[1],remoteIp[2],remoteIp[3],remoteTcpPort);
+void startCameraStream(IPAddress remoteIp, int remoteTcpPort) {
+
 }
 
 void startUdpServer(int localUdpPort, int remoteTcpPort) {
   Serial.printf("Starting udp server on port: '%d'\r\n", localUdpPort);
-    
+  if (udp.listen(localUdpPort)) {
+    Serial.print("UDP Listening on IP: ");
+    Serial.println(WiFi.localIP());
+    udp.onPacket([](AsyncUDPPacket packet) {
+      Serial.print("UDP Packet Type: ");
+      Serial.print(packet.isBroadcast() ? "Broadcast" : packet.isMulticast() ? "Multicast" : "Unicast");
+      Serial.print(", From: ");
+      Serial.print(packet.remoteIP());
+      Serial.print(":");
+      Serial.print(packet.remotePort());
+      Serial.print(", To: ");
+      Serial.print(packet.localIP());
+      Serial.print(":");
+      Serial.print(packet.localPort());
+      Serial.print(", Length: ");
+      Serial.print(packet.length());
+      Serial.print(", Data: ");
+      Serial.write(packet.data(), packet.length());
+      Serial.println();
+      //reply to the client
+      //packet.printf("Got %u bytes of data", packet.length());
+      String stringData = (char*)packet.data();
+      if (stringData.startsWith("tcp:") && streamCount == 0 ) { // only 1 stream possible
+        if (tcp_connection_handler(packet.remoteIP(), streamPort) == ESP_OK) {
+          stream_handler();
+        }
+      }
+    });
+  }
+
 }

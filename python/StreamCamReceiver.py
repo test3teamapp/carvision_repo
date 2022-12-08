@@ -14,19 +14,24 @@ from enum import Enum
 import signal
 import os
 
-from TCPConnectionHandler import TCP_STATE
-from TCPConnectionHandler import TCPConnectionHandler
+from TCPConnectionHandlerViewer import TCP_STATE
+#from TCPConnectionHandler import TCPConnectionHandler
+from TCPConnectionHandlerViewer import TCPConnectionHandlerViewer
 
 _localIP = "10.132.0.2"  # receive UDP broadcast by using '' as address
 _localUDPPort = 20001
 _localTCPPort = 20002
 _bufferSize = 1024
 
+_SHOULD_DETECT = False
 _DEBUG = True
 
 def thread_UDPServer(ipaddr, port):
     _localIP = extract_ip()
-    myTCPConnectionHandler = TCPConnectionHandler(_localIP, _localTCPPort)
+    if(_SHOULD_DETECT):
+        myTCPConnectionHandler = 0 #TCPConnectionHandler(_localIP, _localTCPPort)
+    else:
+        myTCPConnectionHandler = TCPConnectionHandlerViewer(_localIP, _localTCPPort)
     # Create a datagram socket (NOT GREAT FOR RECEIVING IMAGES)
     UDPServerSocket = socket.socket(
         family=socket.AF_INET, type=socket.SOCK_DGRAM)
@@ -51,7 +56,7 @@ def thread_UDPServer(ipaddr, port):
         if (messageStr == "tcp"):
             my_print(f"User requested TCP details for connection")
             _localIP = extract_ip()
-            print(f"myTCPConnectionHandler.tcpState = {myTCPConnectionHandler.tcpState}")
+            print(f"myTCPConnectionHandler.tcpState = {myTCPConnectionHandler.tcpState.value}")
             # the app wants to connect. Make sure there is no TCP process running and blocking the port
             #if (myTCPConnectionHandler.tcpState == TCP_STATE.CONNECTED):
             #    my_print(
@@ -66,7 +71,7 @@ def thread_UDPServer(ipaddr, port):
                 # start a new TCP process
             #    my_print(f"Starting a new TCP server process")
             #    myTCPConnectionHandler.create_TCPProcess()
-            if (myTCPConnectionHandler.tcpState == TCP_STATE.DOWN or myTCPConnectionHandler.tcpState == TCP_STATE.CLOSED):
+            if (myTCPConnectionHandler.tcpState.value == int(TCP_STATE.DOWN) or myTCPConnectionHandler.tcpState.value == int(TCP_STATE.CLOSED)):
                 my_print(f"No TCP server was running. Starting a new process")
                 myTCPConnectionHandler.create_TCPProcess()
             else:
@@ -121,22 +126,22 @@ if __name__ == '__main__':
         my_print(f"__main__ @ PID : {os.getpid()}")
         # signal listener
         # register the signals to be caught
-        signal.signal(signal.SIGCHLD, receiveSignal)
-        signal.signal(signal.SIGHUP, receiveSignal)
-        signal.signal(signal.SIGINT, receiveSignal)
-        signal.signal(signal.SIGQUIT, receiveSignal)
-        signal.signal(signal.SIGILL, receiveSignal)
-        signal.signal(signal.SIGTRAP, receiveSignal)
-        signal.signal(signal.SIGABRT, receiveSignal)
-        signal.signal(signal.SIGBUS, receiveSignal)
-        signal.signal(signal.SIGFPE, receiveSignal)
-        signal.signal(signal.SIGKILL, receiveSignal)
-        signal.signal(signal.SIGUSR1, receiveSignal)
-        signal.signal(signal.SIGSEGV, receiveSignal)
-        signal.signal(signal.SIGUSR2, receiveSignal)
-        signal.signal(signal.SIGPIPE, receiveSignal)
-        signal.signal(signal.SIGALRM, receiveSignal)
-        signal.signal(signal.SIGTERM, receiveSignal)
+        #signal.signal(signal.SIGCHLD, receiveSignal)
+        #signal.signal(signal.SIGHUP, receiveSignal)
+        #signal.signal(signal.SIGINT, receiveSignal)
+        #signal.signal(signal.SIGQUIT, receiveSignal)
+        #signal.signal(signal.SIGILL, receiveSignal)
+        #signal.signal(signal.SIGTRAP, receiveSignal)
+        #signal.signal(signal.SIGABRT, receiveSignal)
+        #signal.signal(signal.SIGBUS, receiveSignal)
+        #signal.signal(signal.SIGFPE, receiveSignal)
+        #signal.signal(signal.SIGKILL, receiveSignal)
+        #signal.signal(signal.SIGUSR1, receiveSignal)
+        #signal.signal(signal.SIGSEGV, receiveSignal)
+        #signal.signal(signal.SIGUSR2, receiveSignal)
+        #signal.signal(signal.SIGPIPE, receiveSignal)
+        #signal.signal(signal.SIGALRM, receiveSignal)
+        #signal.signal(signal.SIGTERM, receiveSignal)
 
     logging.info(f"Main    : starting  UDP Server @ {_localIP}:{_localUDPPort}")
     udpServerThread = threading.Thread(target=thread_UDPServer, args=(

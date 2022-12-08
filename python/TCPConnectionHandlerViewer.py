@@ -17,9 +17,7 @@ from enum import IntEnum
 # for converting cv2 image to PIL Image, to feed the detector
 from PIL import Image
 
-from CoralDetector import CoralDetector
-
-_SHOULD_DETECT = True
+_SHOULD_DETECT = False
 _DEBUG = True
 
 class TCP_STATE(IntEnum):
@@ -28,7 +26,7 @@ class TCP_STATE(IntEnum):
     CONNECTED = 3
     CLOSED = 4
 
-class TCPConnectionHandler:
+class TCPConnectionHandlerViewer:
     """Class for spawning and controlling a process for openning a TCP connection for receiving images """
 
     # variables here are common to all instances of the class #
@@ -103,9 +101,7 @@ class TCPConnectionHandler:
 
         if (_SHOULD_DETECT):
             # create a detector
-            sharedImageQueue = Queue()
-            myCoralDetector = CoralDetector(sharedImageQueue)
-            myCoralDetector.create_DetectProcess()
+            self.my_print("No detector implemented for the Viewer. Use TCPConnectionHandler instead")
 
         while(self.startTCP.value):
             try:
@@ -139,8 +135,8 @@ class TCPConnectionHandler:
                             #### queing them in a FIFO way is not usefull for our purpose
                             #### WE NEED THE TPU TO PROCESS ALWAYS THE LATEST IMAGE (camera frame)
                             #### so...
-                            if (sharedImageQueue.empty()):
-                                sharedImageQueue.put(i)
+                            self.my_print("No detector implemented for the Viewer. Use TCPConnectionHandler instead")
+                            break
                             ### else , skip this frame. the TPU has not processed the previous one
                     
                 else:
@@ -149,7 +145,7 @@ class TCPConnectionHandler:
                         self.startTCP.value = False
                         self.tcpState.value = int(TCP_STATE.CLOSED)
                         if(_SHOULD_DETECT):
-                            myCoralDetector.terminate_DetectProcess()
+                            self.my_print("No detector implemented for the Viewer. Use TCPConnectionHandler instead")
                         break
 
             except BaseException as err:
