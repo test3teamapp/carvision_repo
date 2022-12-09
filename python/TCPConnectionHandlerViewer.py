@@ -123,6 +123,7 @@ class TCPConnectionHandlerViewer:
                         if(not _SHOULD_DETECT):
                             cv2.imshow("preview", i)
                             if cv2.waitKey(1) & 0xFF == ord('q'):
+                                self.startTCP.value = False
                                 break
                         # cv2.waitKey(0)
                          # WE NEED TO TRANSFORM THE CV2 image TO A PIL Image
@@ -147,6 +148,7 @@ class TCPConnectionHandlerViewer:
                         if(_SHOULD_DETECT):
                             self.my_print("No detector implemented for the Viewer. Use TCPConnectionHandler instead")
                         break
+                
 
             except BaseException as err:
                 print(f"Unexpected {err}, {type(err)}")
